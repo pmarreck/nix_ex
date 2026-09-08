@@ -2,6 +2,10 @@
 
 ## Write a generator
 
+The [runnable examples](../examples/README.md) provide six complete `.exs`
+generators with expected results and automated checks. For actual syntax-error
+and runtime-error output, see [error locations](ERROR_LOCATIONS.md).
+
 Save this as `example.exs`, then run
 `nix develop -c mix run -e 'NixEx.CLI.main(["generate", "example.exs", "/tmp/my-nix-tree"])'`.
 Generator scripts are trusted Elixir programs with ordinary host access.

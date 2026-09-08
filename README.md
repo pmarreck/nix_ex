@@ -42,6 +42,15 @@ package and runs checks inside Nix's sandbox.
 See the [prototype guide and coverage matrix](docs/PROTOTYPE.md) for the DSL,
 generation safety, supported semantics, and diagnostic limitations.
 
+There are now [six runnable example generators](examples/README.md), covering
+macros and recursion, imports/assets, module merging, overlays, finite Streams,
+and an intentional Nix error. Each has checked expected results.
+
+Elixir DSL syntax errors retain their original file and line. Nix runtime
+errors currently report generated Nix coordinates, with nearby source comments
+as manual hints. There is no automatic remapping; see
+[verified error locations](docs/ERROR_LOCATIONS.md).
+
 ## Requirements
 
 - Represent all Nix expression forms through explicit AST constructors, with

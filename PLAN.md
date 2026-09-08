@@ -2,6 +2,23 @@
 
 Started 2026-09-08 06:46 EDT. Peter requested a delegated best-shot prototype.
 
+## Runnable examples follow-up
+
+- [x] Add tests that fail until six standalone example generators exist.
+- [x] Add macro/laziness/recursion, multifile assets, module merges, overlay,
+  finite Stream and intentional-error examples with checked expected results.
+- [x] Include examples in sandbox checks and verify CLI generation from another cwd.
+- [x] Document commands and current error locations; keep source-map implementation future.
+- [x] Run complete tests/build and commit passing example work locally.
+
+Verified 2026-09-08 11:27 EDT: 28 tests and CLI generation of all six examples
+passed in the pinned shell and sandboxed package build. Parent independently
+reran the full suite and installed examples 01/06. Nix runtime coordinates
+remain generated-file coordinates; original-line annotations are manual hints.
+
+Curiosity checks: ensure asset reads use `__DIR__`, streams remain finite, an
+intentional failure is forced by Nix, and module inputs retain the existing pin.
+
 ## First prototype
 
 - [x] Research Elixir AST/macros and Nix expression/module semantics using
@@ -45,6 +62,9 @@ Started 2026-09-08 06:46 EDT. Peter requested a delegated best-shot prototype.
   (Einstein owns docs/ACCEPTANCE.md).
 
 ## Eventual acceptance target, not an initial completion claim
+
+- [ ] Add generated-span source maps and translate Nix runtime error locations
+  to unambiguous original Elixir paths/lines (future work, not implemented here).
 
 - [ ] Express the complete Thelio configuration tree through the DSL without
   using raw Nix strings or importing the original configuration as the answer.
