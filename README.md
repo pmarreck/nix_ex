@@ -48,6 +48,10 @@ The authoring goal is familiar Elixir with less ceremony. Inside `nix do`,
 write `lib.mkOption(type: lib.types.bool, default: false)` directly. The macro
 turns dotted access and calls into Nix syntax; `fn %{lib: lib} -> ... end`
 constructs a Nix module function. These forms are demonstrated in example 03.
+Optional arguments use `enabled: enabled \\ true`. Anonymous calls, curried
+lambdas, pipes, string interpolation, `Map.merge`, and path/import helpers keep
+the built-in demo and ordinary examples free of AST-constructor boilerplate.
+Tests check that authoring convention alongside their evaluated results.
 
 There are now [six runnable example generators](examples/README.md), covering
 macros and recursion, imports/assets, module merging, overlays, finite Streams,

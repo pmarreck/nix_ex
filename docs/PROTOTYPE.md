@@ -11,40 +11,42 @@ Save this as `example.exs`, then run
 Generator scripts are trusted Elixir programs with ordinary host access.
 
 ```elixir
-alias NixEx.AST, as: N
 alias NixEx.Project, as: P
 import NixEx.DSL
 
 generated_at_elixir_time = 40
-answer = nix do
-  if true do
-    splice(generated_at_elixir_time) + 2
-  else
-    throw("Nix only forces this if the condition changes")
-  end
+entrypoint = nix do
+  %{
+    answer: splice(generated_at_elixir_time) + 2,
+    imported: import_nix(ref("nested/value"), x: 41),
+    text: builtins.readFile(ref("assets/message.txt"))
+  }
 end
+value = nix do: fn %{x: x} -> x + 1 end
 
 [
-  P.nix("default.nix", N.attrs([
-    answer: answer,
-    imported: N.import_(N.ref("nested/value"), N.attrs([x: 41])),
-    text: N.call(N.var("builtins.readFile"), [N.ref("assets/message.txt")])
-  ])),
-  P.nix("nested/value", N.fn_(N.pattern(["x"]), N.op("+", N.var("x"), 1))),
+  P.nix("default.nix", entrypoint),
+  P.nix("nested/value", value),
   P.asset("assets/message.txt", "shell ${HOME} survives unchanged\n")
 ]
 ```
 
-`N.ref("nested/value")` names a project output from any generated file.
-`N.source_path("../assets/message.txt")` resolves relative to the generated
+`ref("nested/value")` inside `nix` names a project output from any generated file.
+`source_path("../assets/message.txt")` resolves relative to the generated
 source file. Both are Nix paths, emitted as path-plus-string expressions so
 spaces and literal `${...}` in filenames stay safe. Directory references and
-extensionless Nix files work. `N.source_path(".")` can refer to the output root.
+extensionless Nix files work. `source_path(".")` refers to the generated file's
+directory. At the root entrypoint that is the output root.
 `N.absolute_path(...)` explicitly sacrifices relocation. Computed Nix paths can
 be expressed with ordinary operators; static output validation cannot predict
 their eventual evaluation.
 
-`N.import_(path, args)` applies an imported expression. A NixOS module's
+`import_nix(path)` imports an expression; `import_nix(path, x: 41)` imports and
+applies it to an attribute set. The explicit name distinguishes it from Elixir's
+module import. These helpers construct syntax and never read a file in Elixir.
+For generation-time paths use `ref(splice(path))`. AST constructors `N.ref`,
+`N.source_path`, and `N.import_` remain available outside the quoted DSL.
+A NixOS module's
 `imports` is an ordinary attribute containing paths or modules, evaluated by
 Nixpkgs. These operations have different semantics and stay distinct.
 
@@ -57,10 +59,11 @@ The demo module expects `enabled` and `token` through module arguments.
 
 Elixir constructs `%NixEx.Expr{}` data. `nix do ... end` captures a small syntax
 subset using Elixir macros; `splice(...)` explicitly runs ordinary Elixir while
-constructing that data. Unknown DSL forms, including Elixir module calls such as `System.cmd(...)`,
+constructing that data. Unknown DSL forms, including Elixir module calls such
+as `System.cmd(...)`,
 raise `CompileError` with the original file and line. The macro supports
 literals, lists, static-key maps, variables, binary operators, unary `!`/`-`,
-`if` with both branches, one-argument lambdas, `let [name: value] do ... end`,
+`if` with both branches, lambdas, `let [name: value] do ... end`,
 `apply(fun, [args])`, `get(value, ["attribute"])`, and `throw(message)`.
 
 Dotted expressions use Nix scope: `lib.types.bool` selects an attribute and
@@ -72,7 +75,13 @@ variable named `lib` is needed; the generated Nix still requires a binding.
 
 Multiple positional arguments become curried Nix applications:
 `builtins.add(19, 23)` emits the equivalent of `builtins.add 19 23`.
-Nonempty keyword lists in dotted-call argument positions become attribute sets,
+`fact.(6)` calls a function value, including recursively bound functions.
+`fn final, prev -> ... end` becomes `final: prev: ...` in Nix. Partial application
+is supported. `value |> f.(arg)` and `value |> lib.f(arg)` insert `value` as the
+first argument, following Elixir's pipe order. Zero-argument functions, repeated
+parameter names, guards, and multiple clauses are rejected.
+
+Nonempty keyword lists in dotted/anonymous-call and import argument positions become attribute sets,
 including explicitly bracketed `[type: lib.types.bool, default: false]`.
 Elixir's quoted AST does not distinguish that spelling from trailing keywords.
 Ordinary lists remain lists; `[]` is an empty list and `%{}` is an empty set.
@@ -85,7 +94,25 @@ emits a Nix `{ lib, config, ... }: ...` function. The named arguments are
 required and extra arguments are accepted, matching Elixir map patterns.
 The current subset requires each key and bound variable to have the same name;
 renaming, nested patterns, and duplicate keys are rejected. Optional arguments
-still use `N.pattern/2`. See example 03 for complete module declarations.
+use `\\`, for example:
+
+```elixir
+nix do
+  fn %{nixpkgs: nixpkgs, enabled: enabled \\ true} ->
+    # ...
+    enabled
+  end
+end
+```
+
+This is quoted DSL syntax; ordinary Elixir map patterns do not support defaults.
+Defaults remain Nix expressions, can refer to other arguments, and are forced
+only when needed. Explicit `false` or `nil` overrides the default.
+See example 03 for complete module declarations.
+
+`Map.merge(left, right)` is the supported Elixir-module-call exception. It emits
+Nix's shallow, right-biased `//` update, including lazy recursive overlays.
+Other `Map` calls and the three-argument Elixir merge are unsupported.
 
 Inside `nix`, operators have Nix semantics: `1 / 2` is integer division and
 `&&`/`||` require booleans. Arbitrary Elixir code is not transpiled.
@@ -107,8 +134,12 @@ See [Elixir Stream](https://hexdocs.pm/elixir/1.18.4/Stream.html),
 [Nix syntax and semantics](https://nix.dev/manual/nix/2.34/language/syntax.html).
 
 Derivation scripts execute at a third stage, during a Nix build. Plain Elixir
-strings preserve shell `${VARIABLE}` literally; `N.string(["prefix ", expr])`
-explicitly inserts Nix interpolation. The renderer uses escaped quoted Nix
+strings preserve shell `${VARIABLE}` literally. Inside `nix`, `"answer=#{value}"`
+interpolates a Nix expression using `builtins.toString`. Conversion follows Nix:
+for example, `true` becomes `"1"`, and `false` or `nil` becomes `""`. This is not
+Elixir's `String.Chars` protocol. Outside `nix`, interpolation is ordinary Elixir
+generation-time work. `N.string(["prefix ", expr])` remains the explicit AST form.
+The renderer uses escaped quoted Nix
 strings, including for multiline text. It does not reproduce indented-string
 source spelling or dedentation rules.
 
@@ -163,8 +194,8 @@ Macro nodes carry stable basename/line origin labels and render nearby
 annotates explicit AST nodes. Runtime errors retain Nix's generated filename;
 inspect that file's origin comments to find the Elixir declaration. There is
 no sidecar span map or automatic error rewriting, and equal basenames can be
-ambiguous. The demo's explicit origin names its logical generator, not an
-exact expression span. Generated source positions and paths can be observable
+ambiguous. The built-in demo uses macro origins from its actual declarations.
+Generated source positions and paths can be observable
 in Nix, so expression coverage does not prove universal identity.
 
 Full Thelio parity requires a file-by-file translation, pinned option and

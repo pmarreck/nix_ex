@@ -2,6 +2,31 @@
 
 Started 2026-09-08 06:46 EDT. Peter requested a delegated best-shot prototype.
 
+## Further authoring simplification
+
+Peter approved extending the simpler DSL on 2026-09-08.
+
+- [x] Test and implement optional map-pattern arguments using `\\`, retaining
+  lazy defaults and references to other arguments. Check overridden failures.
+- [x] Test and implement anonymous calls, curried multi-argument lambdas and
+  Elixir-style pipes. Check argument order, recursion and unsupported call forms.
+- [x] Test and implement path/import helpers, interpolation and `Map.merge`.
+  Check relocation, literal shell interpolation and lazy overlay recursion.
+- [x] Rewrite the examples under their existing evaluation tests, document the
+  syntax and boundaries, run the complete suite/build, and commit passing work.
+- [x] Update the built-in demo's constructor-heavy modules to the same DSL and
+  test demo/example authoring conventions as well as their evaluated behavior
+  (Peter's follow-up during this work).
+
+Completed 2026-09-08 16:44 EDT. Each syntax addition followed a failing evaluator
+test. The authoring check first identified the built-in demo and five ordinary
+examples as stale; all now use the quoted DSL. Example 06 intentionally retains
+the explicit source-annotation API. Full suite: 45 tests plus CLI generation,
+demo drift detection and all six examples from another cwd. Sandbox build passed.
+Interpolation uses Nix's `builtins.toString`, not Elixir's `String.Chars` protocol;
+map-pattern renaming, nested destructuring, guards and multiple clauses remain
+unsupported. The demo's macro origins now point at actual declaration lines.
+
 ## Project-document pilot
 
 - [x] Migrate the overview's purpose and audience to [INTENT.md](INTENT.md),

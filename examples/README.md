@@ -44,8 +44,10 @@ an overlay against a small synthetic base set and builds no derivations.
 Example 03 uses quoted map-pattern lambdas and direct calls such as
 `lib.mkOption(type: lib.types.bool, default: false)`. Bare dotted expressions
 select Nix attributes; keyword call arguments become Nix attribute sets.
-`splice(N.ref(...))` inserts project paths. Its entrypoint retains `N.pattern/2`
-for the optional `enabled` argument, which has no macro shorthand yet.
+`ref(...)` inserts project paths. Its entrypoint uses `enabled: enabled \\ true`
+for the optional argument. Example 01 uses recursive `fact.(n)` calls;
+example 04 uses a curried `fn final, prev -> ... end`, a pipe into `Map.merge`,
+and ordinary-looking `"answer=#{final.answer}"` interpolation evaluated by Nix.
 
 Example 05 can be consumed as a flake with Nix alone:
 
@@ -80,3 +82,9 @@ Constructor-only AST nodes require explicit `N.at(...)` annotations. See
 expected failure. CLI checks copy every generator and its asset into a path
 containing spaces and run them from another cwd. `./build` runs the same checks
 inside the Nix sandbox. No example needs network-dependent package builds.
+
+The built-in `demo` uses the same quoted DSL and is compared against a separate
+handwritten Nix module fixture, including changed inputs and a type error.
+CLI tests generate it, check it, and detect deliberate output drift. A source
+check rejects use of the AST constructor namespace in the demo and ordinary
+examples; only example 06 retains it to demonstrate explicit source annotations.

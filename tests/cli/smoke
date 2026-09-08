@@ -23,6 +23,23 @@ trap 'rm -rf -- "$examples_cli_tmp"' EXIT
 cp -R "$repository/examples" "$examples_cli_tmp/generator sources"
 if [ "$?" -ne 0 ]; then exit 1; fi
 failures=0
+for command in demo check-demo; do
+  output=$(cd "$examples_cli_tmp" && escript "$repository/nix_ex" "$command" "$examples_cli_tmp/built-in demo" 2>&1)
+  code=$?
+  if [ "$code" -ne 0 ] || [[ "$output" != *"Generated "* ]]; then
+    printf 'CLI %s failed: %s\n' "$command" "$output" >&2
+    failures=$((failures + 1))
+  fi
+done
+if [ -f "$examples_cli_tmp/built-in demo/default.nix" ]; then
+  printf '\n# deliberate test drift\n' >> "$examples_cli_tmp/built-in demo/default.nix"
+  output=$(escript "$repository/nix_ex" check-demo "$examples_cli_tmp/built-in demo" 2>&1)
+  code=$?
+  if [ "$code" -eq 0 ] || [[ "$output" != *"differs"* ]]; then
+    printf 'CLI check-demo failed to detect drift: %s\n' "$output" >&2
+    failures=$((failures + 1))
+  fi
+fi
 for example in 01_macro_and_recursion 02_imports_and_assets 03_module_merging 04_overlay 05_stream 06_intentional_error; do
   output=$(cd "$examples_cli_tmp" && escript "$repository/nix_ex" generate "$examples_cli_tmp/generator sources/$example.exs" "$examples_cli_tmp/generated $example" 2>&1)
   code=$?
@@ -32,4 +49,4 @@ for example in 01_macro_and_recursion 02_imports_and_assets 03_module_merging 04
   fi
 done
 if [ "$failures" -ne 0 ]; then exit "$failures"; fi
-printf 'CLI smoke and six examples from another cwd passed\n'
+printf 'CLI smoke, demo drift check and six examples from another cwd passed\n'

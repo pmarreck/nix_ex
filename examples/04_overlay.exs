@@ -1,31 +1,20 @@
-alias NixEx.AST, as: N
+import NixEx.DSL
 alias NixEx.Project, as: P
 
-# A reusable final: prev: overlay. The final reference sees the overridden answer.
+# The multi-argument lambda emits final: prev: and keeps the fixed point in Nix.
 overlay =
-  N.fn_(
-    "final",
-    N.fn_(
-      "prev",
-      N.attrs(
-        answer: N.op("+", N.var("prev.answer"), 1),
-        description: N.string(["answer=", N.call(N.var("toString"), [N.var("final.answer")])])
-      )
-    )
-  )
+  nix do
+    fn final, prev ->
+      %{answer: prev.answer + 1, description: "answer=#{final.answer}"}
+    end
+  end
 
 result =
-  N.let(
-    [
-      base: N.attrs(answer: 41),
-      final:
-        N.op(
-          "//",
-          N.var("base"),
-          N.call(N.import_(N.ref("overlay.nix")), [N.var("final"), N.var("base")])
-        )
-    ],
-    N.var("final")
-  )
+  nix do
+    let base: %{answer: 41},
+        final: base |> Map.merge(import_nix(ref("overlay.nix")).(final, base)) do
+      final
+    end
+  end
 
 [P.nix("default.nix", result), P.nix("overlay.nix", overlay)]

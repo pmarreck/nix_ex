@@ -4,6 +4,28 @@ defmodule NixEx.ExamplesTest do
 
   @examples Path.expand("../../examples", __DIR__)
 
+  test "the demo and ordinary examples teach the quoted DSL without constructor boilerplate" do
+    paths = [
+      Path.expand("../../lib/nix_ex/demo.ex", __DIR__) | Path.wildcard(@examples <> "/*.exs")
+    ]
+
+    constructor_users =
+      Enum.flat_map(paths, fn path ->
+        syntax = path |> File.read!() |> Code.string_to_quoted!()
+
+        {_, aliases} =
+          Macro.prewalk(syntax, [], fn
+            {:__aliases__, _, [:NixEx, :AST]} = node, found -> {node, [node | found]}
+            node, found -> {node, found}
+          end)
+
+        if aliases == [], do: [], else: [Path.basename(path)]
+      end)
+
+    # This example deliberately teaches explicit source annotations through N.at.
+    assert Enum.sort(constructor_users) == ["06_intentional_error.exs"]
+  end
+
   # Run the public generator entry point; the real evaluator decides the result.
   defp generate!(name, root) do
     output = Path.join(root, name)

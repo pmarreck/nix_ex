@@ -11,6 +11,207 @@ defmodule NixEx.DSLTest do
     expression
   end
 
+  test "optional map arguments use lazy Nix defaults and preserve false and null overrides" do
+    alias NixEx.AST, as: N
+
+    module =
+      quoted!(~S"""
+      fn %{base: base, answer: answer \\ (base + 2), enabled: enabled \\ true} ->
+        %{answer: answer, enabled: enabled}
+      end
+      """)
+
+    assert eval!(N.call(module, [N.attrs(base: 40)])) == ~s({"answer":42,"enabled":true})
+    assert eval!(N.call(module, [N.attrs(base: 10)])) == ~s({"answer":12,"enabled":true})
+
+    assert eval!(N.call(module, [N.attrs(base: 40, answer: nil, enabled: false)])) ==
+             ~s({"answer":null,"enabled":false})
+
+    dangerous =
+      quoted!(~S"""
+      fn %{value: value \\ builtins.throw("default forced")} -> value end
+      """)
+
+    assert eval!(N.call(dangerous, [N.attrs(value: 7)])) == "7"
+
+    assert_raise RuntimeError, ~r/default forced/, fn ->
+      eval!(N.call(dangerous, [N.attrs([])]))
+    end
+
+    unused =
+      quoted!(~S"""
+      fn %{value: value \\ builtins.throw("unused default")} -> 42 end
+      """)
+
+    assert eval!(N.call(unused, [N.attrs([])])) == "42"
+  end
+
+  test "optional map patterns reject renamed variables and duplicate keys" do
+    for source <- [
+          ~S|fn %{value: renamed \\ 1} -> renamed end|,
+          ~S|fn %{value: value, value: value \\ 1} -> value end|
+        ] do
+      assert_raise CompileError, fn -> quoted!(source) end
+    end
+  end
+
+  test "anonymous calls support recursive functions and curried multi-argument lambdas" do
+    assert eval!(
+             quoted!(~S"""
+             let [subtract: fn x, y -> x - y end, from_fifty: subtract.(50)] do
+               %{direct: subtract.(50, 8), partial: from_fifty.(9)}
+             end
+             """)
+           ) == ~s({"direct":42,"partial":41})
+
+    assert eval!(
+             quoted!(~S"""
+             let [fact: fn n -> if n == 0, do: 1, else: n * fact.(n - 1) end] do
+               fact.(6)
+             end
+             """)
+           ) == "720"
+
+    assert eval!(
+             quoted!(~S"""
+             (fn %{base: base}, %{delta: delta \\ 2} -> base + delta end).(%{base: 40}, %{})
+             """)
+           ) == "42"
+  end
+
+  test "anonymous call keywords and unused arguments retain Nix semantics" do
+    assert eval!(
+             quoted!(~S"""
+             (fn %{answer: answer} -> answer end).(answer: 42)
+             """)
+           ) == "42"
+
+    assert eval!(
+             quoted!(~S"""
+             (fn unused -> 42 end).(builtins.throw("anonymous forced"))
+             """)
+           ) == "42"
+
+    assert_raise RuntimeError, ~r/anonymous forced/, fn ->
+      eval!(quoted!(~S|(fn x -> x end).(builtins.throw("anonymous forced"))|))
+    end
+  end
+
+  test "pipes insert the first argument in order for dotted and anonymous calls" do
+    assert eval!(
+             quoted!(~S"""
+             let [subtract: fn x, y -> x - y end] do
+               50 |> subtract.(6) |> builtins.sub(2)
+             end
+             """)
+           ) == "42"
+
+    assert eval!(quoted!(~S'"answer" |> builtins.getAttr(answer: 42)')) == "42"
+  end
+
+  test "invalid call and function shapes retain compile errors" do
+    for source <- [
+          "(fn x -> x end).()",
+          "fn -> 42 end",
+          "fn x, x -> x end",
+          "fn %{x: x}, x -> x end",
+          "fn x when x > 0 -> x end",
+          "fn 0 -> 1; x -> x end",
+          "42 |> 7",
+          ~S'"host" |> String.upcase()'
+        ] do
+      assert_raise CompileError, fn -> quoted!(source) end
+    end
+  end
+
+  test "path helpers and imports preserve assets and argument application after relocation" do
+    alias NixEx.Project, as: P
+    root = tmp!()
+    destination = Path.join(root, "generated")
+    entry = quoted!(~S|import_nix(ref("nested/module"), x: 41)|)
+
+    nested =
+      quoted!(~S"""
+      fn %{x: x} ->
+        %{answer: x + 1, message: builtins.readFile(source_path("../assets/message.txt"))}
+      end
+      """)
+
+    P.write(
+      [
+        P.nix("default.nix", entry),
+        P.nix("nested/module", nested),
+        P.asset("assets/message.txt", "hello ${USER}\n")
+      ],
+      destination
+    )
+
+    relocated = Path.join(root, "moved tree")
+    File.rename!(destination, relocated)
+
+    assert {~s({"answer":42,"message":"hello ${USER}\\n"}), 0} ==
+             eval_file(Path.join(relocated, "default.nix"))
+
+    File.write!(Path.join(relocated, "assets/message.txt"), "changed")
+
+    assert {~s({"answer":42,"message":"changed"}), 0} ==
+             eval_file(Path.join(relocated, "default.nix"))
+
+    assert_raise ArgumentError, fn ->
+      P.write([P.nix("default.nix", quoted!(~S|ref("../escape")|))], Path.join(root, "bad"))
+    end
+
+    refute File.exists?(Path.join(root, "bad"))
+  end
+
+  test "interpolation converts Nix values while preserving shell expansion and literal text" do
+    expression =
+      quoted!(~S"""
+      let [answer: 42] do
+        "λ ${HOME}: #{answer}\n#{builtins.add(1, 2)} \\\""
+      end
+      """)
+
+    assert eval!(expression) == eval!("λ ${HOME}: 42\n3 \\\"")
+    assert eval!(quoted!(~S|["#{true}", "#{false}", "#{nil}"]|)) == ~s(["1","",""])
+
+    assert eval!(
+             quoted!(~S|if true, do: "ok", else: "#{builtins.throw("interpolation forced")}"|)
+           ) == ~s("ok")
+
+    assert_raise RuntimeError, ~r/interpolation forced/, fn ->
+      eval!(quoted!(~S|"#{builtins.throw("interpolation forced")}"|))
+    end
+
+    assert_raise CompileError, fn -> quoted!(~S|"#{System.get_env("HOME")}"|) end
+    assert_raise CompileError, fn -> quoted!("<<1, 2>>") end
+  end
+
+  test "Map.merge is a shallow right-biased Nix update and supports overlay recursion" do
+    assert eval!(quoted!("%{answer: 41} |> Map.merge(answer: 42)")) == ~s({"answer":42})
+
+    assert eval!(
+             quoted!(~S"""
+             Map.merge(%{nested: %{a: 1}, kept: true}, %{nested: %{b: 2}, added: 3})
+             """)
+           ) == ~s({"added":3,"kept":true,"nested":{"b":2}})
+
+    assert eval!(
+             quoted!(~S"""
+             let [
+               overlay: fn final, prev -> %{answer: prev.answer + 1, forward: final.answer} end,
+               base: %{answer: 41}, final: base |> Map.merge(overlay.(final, base))
+             ] do
+               final
+             end
+             """)
+           ) == ~s({"answer":42,"forward":42})
+
+    assert eval!(quoted!(~S|Map.merge(%{x: builtins.throw("replaced")}, %{x: 42}).x|)) == "42"
+    assert_raise CompileError, fn -> quoted!("Map.merge(%{}, %{}, fn x -> x end)") end
+    assert_raise CompileError, fn -> quoted!("Map.delete(%{}, :x)") end
+  end
+
   test "dotted access retains function values and arbitrary lexical namespaces" do
     expression =
       quoted!(~S"""
@@ -173,7 +374,7 @@ defmodule NixEx.DSLTest do
   end
 
   test "unsupported partial forms report CompileError consistently" do
-    for source <- ["%{key => 1}", "if true, do: 1", "fn x, y -> x + y end", "let [1], do: 2"] do
+    for source <- ["%{key => 1}", "if true, do: 1", "let [1], do: 2"] do
       assert_raise CompileError, ~r/unsupported nix syntax/, fn ->
         Code.eval_string("import NixEx.DSL\nnix do\n" <> source <> "\nend", [],
           file: "unsupported.exs"

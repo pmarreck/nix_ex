@@ -1,4 +1,3 @@
-alias NixEx.AST, as: N
 alias NixEx.Project, as: P
 import NixEx.DSL
 
@@ -37,7 +36,7 @@ root_module =
   nix do
     fn %{lib: lib, enabled: enabled} ->
       %{
-        imports: [splice(N.ref("modules/options.nix")), splice(N.ref("modules/service.nix"))],
+        imports: [ref("modules/options.nix"), ref("modules/service.nix")],
         config: %{
           example: %{
             enabled: enabled,
@@ -49,21 +48,19 @@ root_module =
     end
   end
 
-# Optional Nix function arguments still use the explicit pattern constructor.
 entrypoint =
-  N.fn_(
-    N.pattern(["nixpkgs", {"enabled", true}]),
-    nix do
+  nix do
+    fn %{nixpkgs: nixpkgs, enabled: enabled \\ true} ->
       let lib: builtins.import(nixpkgs + "/lib"),
           result:
             lib.evalModules(
               specialArgs: %{enabled: enabled},
-              modules: [splice(N.ref("modules/default.nix"))]
+              modules: [ref("modules/default.nix")]
             ) do
         result.config.example
       end
     end
-  )
+  end
 
 [
   P.nix("default.nix", entrypoint),
