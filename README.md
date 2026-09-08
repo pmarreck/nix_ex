@@ -1,5 +1,7 @@
 # nix_ex
 
+[Project intent](INTENT.md) · [Terminology](TERMINOLOGY.md) · [Current work](PLAN.md)
+
 An experimental Elixir DSL that generates ordinary, relocatable Nix source
 trees. The prototype implements structured expressions, a small quoted macro
 subset, multiple files and assets, and real Nixpkgs module evaluation.

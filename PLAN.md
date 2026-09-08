@@ -2,6 +2,23 @@
 
 Started 2026-09-08 06:46 EDT. Peter requested a delegated best-shot prototype.
 
+## Project-document pilot
+
+- [x] Migrate the overview's purpose and audience to [INTENT.md](INTENT.md),
+  extract definitions to [TERMINOLOGY.md](TERMINOLOGY.md), and keep progress here.
+  Peter requested this convention on 2026-09-08. Original overview is recoverable
+  from commit `02c7678efe34be8d78515c8874af186e66922f9d`.
+- [x] Verify the documentation migration and existing suite before committing.
+  Completed 2026-09-08 16:27 EDT: 35 tests passed, plus CLI smoke checks and
+  six examples from another working directory; documentation links checked.
+
+The former overview's status summary is preserved by the first-prototype and
+future milestones below: expression rendering, lazy target semantics,
+multifile output and synthetic module evaluation were demonstrated; complete
+host translation, source-map diagnostics and production output updates remained
+future work at the overview's recorded revision. This is a historical summary,
+not a substitute for newer progress entries.
+
 ## Elixir authoring ergonomics
 
 Peter clarified the product goal on 2026-09-08: make Nix appealing to Elixir
