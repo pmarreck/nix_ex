@@ -1,78 +1,68 @@
 alias NixEx.AST, as: N
 alias NixEx.Project, as: P
+import NixEx.DSL
 
 # These are NixOS-style modules evaluated with lib.evalModules, without a host.
-option = fn type, default ->
-  N.call(N.var("lib.mkOption"), [N.attrs(type: type, default: default)])
-end
-
 options =
-  N.fn_(
-    N.pattern(["lib"], ellipsis: true),
-    N.attrs(
-      options:
-        N.attrs(
-          example:
-            N.attrs(
-              enabled: option.(N.var("lib.types.bool"), false),
-              message: option.(N.var("lib.types.str"), "option default"),
-              order: option.(N.call(N.var("lib.types.listOf"), [N.var("lib.types.str")]), [])
-            )
-        )
-    )
-  )
+  nix do
+    fn %{lib: lib} ->
+      %{
+        options: %{
+          example: %{
+            enabled: lib.mkOption(type: lib.types.bool, default: false),
+            message: lib.mkOption(type: lib.types.str, default: "option default"),
+            order: lib.mkOption(type: lib.types.listOf(lib.types.str), default: [])
+          }
+        }
+      }
+    end
+  end
 
 service =
-  N.fn_(
-    N.pattern(["lib", "config"], ellipsis: true),
-    N.attrs(
-      config:
-        N.call(N.var("lib.mkIf"), [
-          N.var("config.example.enabled"),
-          N.attrs(
-            example:
-              N.attrs(
-                message: N.call(N.var("lib.mkForce"), ["welcome"]),
-                order: N.call(N.var("lib.mkBefore"), [["first"]])
-              )
-          )
-        ])
-    )
-  )
+  nix do
+    fn %{lib: lib, config: config} ->
+      %{
+        config:
+          lib.mkIf(config.example.enabled, %{
+            example: %{
+              message: lib.mkForce("welcome"),
+              order: lib.mkBefore(["first"])
+            }
+          })
+      }
+    end
+  end
 
 root_module =
-  N.fn_(
-    N.pattern(["lib", "enabled"], ellipsis: true),
-    N.attrs(
-      imports: [N.ref("modules/options.nix"), N.ref("modules/service.nix")],
-      config:
-        N.attrs(
-          example:
-            N.attrs(
-              enabled: N.var("enabled"),
-              message: N.call(N.var("lib.mkDefault"), ["disabled"]),
-              order: ["last"]
-            )
-        )
-    )
-  )
+  nix do
+    fn %{lib: lib, enabled: enabled} ->
+      %{
+        imports: [splice(N.ref("modules/options.nix")), splice(N.ref("modules/service.nix"))],
+        config: %{
+          example: %{
+            enabled: enabled,
+            message: lib.mkDefault("disabled"),
+            order: ["last"]
+          }
+        }
+      }
+    end
+  end
 
+# Optional Nix function arguments still use the explicit pattern constructor.
 entrypoint =
   N.fn_(
     N.pattern(["nixpkgs", {"enabled", true}]),
-    N.let(
-      [
-        lib: N.import_(N.op("+", N.var("nixpkgs"), "/lib")),
-        result:
-          N.call(N.var("lib.evalModules"), [
-            N.attrs(
-              specialArgs: N.attrs([N.inherit_(["enabled"])]),
-              modules: [N.ref("modules/default.nix")]
-            )
-          ])
-      ],
-      N.var("result.config.example")
-    )
+    nix do
+      let lib: builtins.import(nixpkgs + "/lib"),
+          result:
+            lib.evalModules(
+              specialArgs: %{enabled: enabled},
+              modules: [splice(N.ref("modules/default.nix"))]
+            ) do
+        result.config.example
+      end
+    end
   )
 
 [

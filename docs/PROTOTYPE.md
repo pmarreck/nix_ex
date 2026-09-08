@@ -57,11 +57,35 @@ The demo module expects `enabled` and `token` through module arguments.
 
 Elixir constructs `%NixEx.Expr{}` data. `nix do ... end` captures a small syntax
 subset using Elixir macros; `splice(...)` explicitly runs ordinary Elixir while
-constructing that data. Unknown DSL forms, including arbitrary remote calls,
+constructing that data. Unknown DSL forms, including Elixir module calls such as `System.cmd(...)`,
 raise `CompileError` with the original file and line. The macro supports
 literals, lists, static-key maps, variables, binary operators, unary `!`/`-`,
 `if` with both branches, one-argument lambdas, `let [name: value] do ... end`,
 `apply(fun, [args])`, `get(value, ["attribute"])`, and `throw(message)`.
+
+Dotted expressions use Nix scope: `lib.types.bool` selects an attribute and
+`lib.mkOption(type: lib.types.bool, default: false)` applies a Nix function to
+an attribute set. Bare `lib.mkOption` selects the function without applying it.
+This works for any expression receiver, including custom namespaces and call
+results such as `lib.types.listOf(lib.types.str).check(["first"])`. No Elixir
+variable named `lib` is needed; the generated Nix still requires a binding.
+
+Multiple positional arguments become curried Nix applications:
+`builtins.add(19, 23)` emits the equivalent of `builtins.add 19 23`.
+Nonempty keyword lists in dotted-call argument positions become attribute sets,
+including explicitly bracketed `[type: lib.types.bool, default: false]`.
+Elixir's quoted AST does not distinguish that spelling from trailing keywords.
+Ordinary lists remain lists; `[]` is an empty list and `%{}` is an empty set.
+Zero-argument calls such as `lib.mkOption()` are rejected; use bare attribute
+selection to retain a function value. These conventions belong to the quoted
+DSL and do not change ordinary Elixir execution outside it.
+
+Module functions can use `fn %{lib: lib, config: config} -> ... end`, which
+emits a Nix `{ lib, config, ... }: ...` function. The named arguments are
+required and extra arguments are accepted, matching Elixir map patterns.
+The current subset requires each key and bound variable to have the same name;
+renaming, nested patterns, and duplicate keys are rejected. Optional arguments
+still use `N.pattern/2`. See example 03 for complete module declarations.
 
 Inside `nix`, operators have Nix semantics: `1 / 2` is integer division and
 `&&`/`||` require booleans. Arbitrary Elixir code is not transpiled.

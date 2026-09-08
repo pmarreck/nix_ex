@@ -41,6 +41,39 @@ defmodule NixEx.DSL do
     call(:fn_, [Atom.to_string(name), translate(body, env)], meta, env)
   end
 
+  defp translate({:fn, meta, [{:->, _, [[{:%{}, _, pairs}], body]}]} = syntax, env) do
+    names =
+      Enum.map(pairs, fn
+        {name, {name, _, context}} when is_atom(name) and is_atom(context) ->
+          Atom.to_string(name)
+
+        _ ->
+          unsupported!(syntax, env)
+      end)
+
+    if length(Enum.uniq(names)) != length(names), do: unsupported!(syntax, env)
+    pattern = quote do: NixEx.AST.pattern(unquote(names), ellipsis: true)
+    call(:fn_, [pattern, translate(body, env)], meta, env)
+  end
+
+  # Quoted dots select Nix attributes; parentheses with arguments apply the value.
+  # Translating the receiver recursively also handles attributes of call results.
+  defp translate({{:., _, [{:__aliases__, _, _}, _]}, _, _} = syntax, env),
+    do: unsupported!(syntax, env)
+
+  defp translate({{:., _, [receiver, name]}, meta, args} = syntax, env)
+       when is_atom(name) and is_list(args) do
+    if args == [] and not Keyword.get(meta, :no_parens, false),
+      do: unsupported!(syntax, env)
+
+    selection = call(:select, [translate(receiver, env), [Atom.to_string(name)]], meta, env)
+
+    case args do
+      [] -> selection
+      _ -> call(:call, [selection, Enum.map(args, &call_argument(&1, meta, env))], meta, env)
+    end
+  end
+
   defp translate({:let, meta, [bindings, [do: body]]} = syntax, env) when is_list(bindings) do
     unless Keyword.keyword?(bindings), do: unsupported!(syntax, env)
     pairs = Enum.map(bindings, fn {k, v} -> {k, translate(v, env)} end)
@@ -73,6 +106,16 @@ defmodule NixEx.DSL do
     do: call(:var, [Atom.to_string(name)], meta, env)
 
   defp translate(unknown, env), do: unsupported!(unknown, env)
+
+  # Elixir represents both trailing keywords and bracketed keywords as a list.
+  # Only nonempty keyword lists in dotted-call argument positions become sets.
+  defp call_argument(value, meta, env) when is_list(value) and value != [] do
+    if Keyword.keyword?(value),
+      do: translate({:%{}, meta, value}, env),
+      else: translate(value, env)
+  end
+
+  defp call_argument(value, _meta, env), do: translate(value, env)
 
   defp unsupported!(unknown, env) do
     meta = if is_tuple(unknown) and tuple_size(unknown) == 3, do: elem(unknown, 1), else: []

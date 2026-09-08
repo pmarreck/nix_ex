@@ -41,6 +41,12 @@ This evaluates synthetic NixOS-style modules through `lib.evalModules`.
 It does not instantiate or activate a host configuration. Example 04 evaluates
 an overlay against a small synthetic base set and builds no derivations.
 
+Example 03 uses quoted map-pattern lambdas and direct calls such as
+`lib.mkOption(type: lib.types.bool, default: false)`. Bare dotted expressions
+select Nix attributes; keyword call arguments become Nix attribute sets.
+`splice(N.ref(...))` inserts project paths. Its entrypoint retains `N.pattern/2`
+for the optional `enabled` argument, which has no macro shorthand yet.
+
 Example 05 can be consumed as a flake with Nix alone:
 
 ```sh

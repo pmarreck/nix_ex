@@ -2,6 +2,28 @@
 
 Started 2026-09-08 06:46 EDT. Peter requested a delegated best-shot prototype.
 
+## Elixir authoring ergonomics
+
+Peter clarified the product goal on 2026-09-08: make Nix appealing to Elixir
+developers who find it off-putting. Corresponding Elixir forms should be
+simpler where possible; AST-constructor verbosity is a usability gap.
+
+- [x] Agree on quoted attribute access, function-call syntax, and explicit module arguments.
+- [x] Add failing evaluator-backed tests for the agreed syntax, including scope,
+  nested attributes, curried applications, and the host/Nix execution boundary.
+- [x] Implement the syntax and rewrite example 03 to demonstrate simpler authoring.
+- [x] Run the complete suite and sandbox build, update syntax documentation, and commit.
+
+Completed 2026-09-08 16:04 EDT. Six new behavior tests failed on unsupported
+syntax before implementation. The complete suite now passes 35 tests plus CLI
+checks for all six examples; the sandbox package build also passed. Example 03
+uses direct dotted calls and module map patterns. Optional arguments still need
+`N.pattern/2`; map-pattern renaming and nested destructuring remain unsupported.
+
+Curiosity checks: `lib` must remain lexically bound, custom namespaces should
+work too, and keyword shorthand must have a clear meaning beside Nix lists.
+Existing source-map and Thelio parity milestones remain below.
+
 ## Runnable examples follow-up
 
 - [x] Add tests that fail until six standalone example generators exist.

@@ -42,6 +42,11 @@ package and runs checks inside Nix's sandbox.
 See the [prototype guide and coverage matrix](docs/PROTOTYPE.md) for the DSL,
 generation safety, supported semantics, and diagnostic limitations.
 
+The authoring goal is familiar Elixir with less ceremony. Inside `nix do`,
+write `lib.mkOption(type: lib.types.bool, default: false)` directly. The macro
+turns dotted access and calls into Nix syntax; `fn %{lib: lib} -> ... end`
+constructs a Nix module function. These forms are demonstrated in example 03.
+
 There are now [six runnable example generators](examples/README.md), covering
 macros and recursion, imports/assets, module merging, overlays, finite Streams,
 and an intentional Nix error. Each has checked expected results.
