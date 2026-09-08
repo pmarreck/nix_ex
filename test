@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -u
+if [ "${NIX_EX_IN_SHELL:-}" != 1 ]; then
+  exec nix develop -c ./test "$@"
+fi
+failures=0
+mix test "$@"
+code=$?
+failures=$((failures + code))
+if [ "$#" -eq 0 ]; then
+  bash tests/cli/smoke
+  failures=$((failures + $?))
+fi
+exit "$failures"

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -u
+mix escript.build >/dev/null
+code=$?
+if [ "$code" -ne 0 ]; then exit "$code"; fi
+output=$(escript ./nix_ex --help 2>&1)
+code=$?
+if [ "$code" -ne 0 ] || [[ "$output" != *"demo DESTINATION"* ]]; then
+  printf 'CLI help failed: %s\n' "$output" >&2
+  exit 1
+fi
+output=$(escript ./nix_ex unsupported 2>&1)
+code=$?
+if [ "$code" -eq 0 ] || [[ "$output" != *"usage:"* ]]; then
+  printf 'CLI invalid command failed: %s\n' "$output" >&2
+  exit 1
+fi
+printf 'CLI smoke passed\n'
