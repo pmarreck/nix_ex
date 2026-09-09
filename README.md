@@ -194,11 +194,10 @@ Elixir syntax errors retain their original file and line. Nix runtime errors
 report generated coordinates, with nearby source comments as manual hints.
 [Automatic error remapping is not implemented](docs/ERROR_LOCATIONS.md).
 
-The eventual target is a configuration as complex as Thelio's, including its
-flake, modules, overlays, derivations, and assets. Full translation and parity
-comparison remain unfinished. See the [acceptance plan](docs/ACCEPTANCE.md) and
-[configuration inventory](docs/THELIO_REQUIREMENTS.md).
+The goal is to support complete NixOS configurations spanning flakes, modules,
+overlays, derivations, and supporting assets. Full configuration translation
+and parity comparison remain unfinished. See the
+[acceptance plan](docs/ACCEPTANCE.md) for the verification criteria.
 
-The live `/etc/nixos` configuration remains read-only reference material.
-Committed fixtures use synthetic values; publication does not authorize host
-activation, service changes, or deployment.
+Examples and tests use synthetic configurations. Generating or evaluating them
+does not activate a system, change services, or deploy a configuration.

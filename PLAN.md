@@ -2,6 +2,14 @@
 
 Started 2026-09-08 06:46 EDT. Peter requested a delegated best-shot prototype.
 
+## Public README wording
+
+- [x] Replace personal host references with generic configuration goals and
+  example safety boundaries. Preserve the CI badge and its URLs, as Peter
+  explicitly requested on 2026-09-09.
+- [x] Verify examples/build and push the README cleanup. Verified 2026-09-09
+  19:15 EDT: 46 tests, CLI checks, and sandbox build passed.
+
 ## Documentation refresh and first publication
 
 - [x] Check current docs and examples for stale claims; preserve dated evidence.
