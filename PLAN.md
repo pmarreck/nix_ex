@@ -7,7 +7,7 @@ Started 2026-09-08 06:46 EDT. Peter requested a delegated best-shot prototype.
 - [x] Check current docs and examples for stale claims; preserve dated evidence.
 - [x] Add clear README examples and execute their snippets in the test suite.
 - [x] Configure and build exact CI targets; create `pmarreck/nix_ex` on GitHub.
-- [ ] Commit, push to GitHub, and verify the remote commit.
+- [x] Commit, push to GitHub, and verify the remote commit.
 - [ ] Provision the repository webhook and verify the exact commit's CI result.
 
 Local verification 2026-09-09: 46 tests and CLI checks passed; sandbox package
@@ -17,6 +17,14 @@ still match current behavior; the earlier defaults limitation is marked historic
 Webhook dry-run reports CREATE for this repository. Provisioning requires the
 root-owned secret; this session's noninteractive sudo attempt was refused.
 Peter has been given the scoped command in [docs/CI.md](docs/CI.md).
+
+Published 2026-09-09 18:06 EDT at https://github.com/pmarreck/nix_ex, public,
+with `yolo` as the default branch. Fetched `origin/yolo` matched publication
+commit `7c9719c16e472844c7fe2956bea2afe7a02a2edd`. GitHub's Markdown renderer
+confirmed three Elixir blocks and the syntax table's two columns; local README
+links resolved. No webhook or CI result exists yet; the badge endpoint returns
+404 until its first accepted build. This status note follows the publication
+commit and also needs to be pushed.
 
 Peter requested publication on 2026-09-09. Check README snippets against real
 Nix evaluation, and keep the existing host activation boundary intact.
