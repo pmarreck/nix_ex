@@ -23,8 +23,7 @@ with `yolo` as the default branch. Fetched `origin/yolo` matched publication
 commit `7c9719c16e472844c7fe2956bea2afe7a02a2edd`. GitHub's Markdown renderer
 confirmed three Elixir blocks and the syntax table's two columns; local README
 links resolved. No webhook or CI result exists yet; the badge endpoint returns
-404 until its first accepted build. This status note follows the publication
-commit and also needs to be pushed.
+404 until its first accepted build.
 
 Peter requested publication on 2026-09-09. Check README snippets against real
 Nix evaluation, and keep the existing host activation boundary intact.
