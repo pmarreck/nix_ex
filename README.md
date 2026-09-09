@@ -1,91 +1,204 @@
 # nix_ex
 
-[Project intent](INTENT.md) · [Terminology](TERMINOLOGY.md) · [Current work](PLAN.md)
+[![Mechatron Prime CI](https://img.shields.io/endpoint?url=https%3A%2F%2Fthelio-nixos.tail66c90.ts.net%2Fbadges%2Fnix_ex.json&style=for-the-badge)](https://thelio-nixos.tail66c90.ts.net/mechatron-prime/)
 
-An experimental Elixir DSL that generates ordinary, relocatable Nix source
-trees. The prototype implements structured expressions, a small quoted macro
-subset, multiple files and assets, and real Nixpkgs module evaluation.
+Write Nix configurations in familiar Elixir syntax. Generate ordinary,
+relocatable Nix files that work with Nix alone.
 
-The goal is to express configurations as complicated as Peter's Thelio NixOS
-configuration in Elixir, including a flake, multiple imported modules, overlays,
-derivations, and their supporting files. This is an investigation, not a claim
-that the full configuration has already been translated.
+`nix_ex` is an experimental authoring layer for Elixir developers who find Nix
+hard to approach. Inside `nix do`, a macro turns your expressions into Nix
+syntax. Nix handles lazy evaluation, recursive bindings, and module merging.
+Outside the block, you have ordinary Elixir for organizing and generating files.
 
-Elixir constructs a Nix expression tree; Nix evaluates it. Tests retain unused
-throws, recursive bindings and delayed function arguments until Nix forces
-them. Elixir streams defer generation-time enumeration only.
+[Project intent](INTENT.md) · [DSL guide](docs/PROTOTYPE.md) · [Examples](examples/README.md) · [Current work](PLAN.md)
 
-## Try it
+## Quick start
+
+Install Nix with flakes and `nix-command` enabled. The project supplies its pinned
+Elixir/OTP toolchain through Nix; a separate Elixir installation is unnecessary.
+
+```sh
+git clone https://github.com/pmarreck/nix_ex.git
+cd nix_ex
+./build
+```
+
+Save this complete generator as `hello.exs`:
+
+<!-- example: quickstart -->
+```elixir
+import NixEx.DSL
+alias NixEx.Project, as: P
+
+expression =
+  nix do
+    let name: "Elixir", double: fn x -> x * 2 end do
+      %{answer: double.(21), greeting: "hello #{name}"}
+    end
+  end
+
+[P.nix("default.nix", expression)]
+```
+
+Generate the Nix files, then evaluate them:
+
+```sh
+./result/bin/nix-ex generate hello.exs ./hello-nix
+nix-instantiate --eval --strict --json ./hello-nix/default.nix
+```
+
+```json
+{"answer":42,"greeting":"hello Elixir"}
+```
+
+You can move `hello-nix` elsewhere and evaluate it without Elixir. Use a fresh
+destination with an existing parent. Identical output is a successful no-op;
+changed existing trees are refused, so generate into another directory to
+compare revisions. Symlink ancestors are refused too; on macOS use canonical
+paths such as `/private/tmp` instead of `/tmp`.
+
+Generator scripts are trusted Elixir programs with ordinary host access. Only
+run generators you trust.
+
+## Declare module options
+
+Write calls such as `lib.mkOption(...)` directly. There is no need to construct
+function-call or attribute-set AST nodes yourself:
+
+<!-- example: options -->
+```elixir
+import NixEx.DSL
+
+nix do
+  fn %{lib: lib} ->
+    %{
+      options: %{
+        example: %{
+          enabled: lib.mkOption(type: lib.types.bool, default: false),
+          message: lib.mkOption(type: lib.types.str, default: "welcome")
+        }
+      }
+    }
+  end
+end
+```
+
+This expression produces a Nix module function. Nixpkgs supplies `lib` when it
+evaluates the module; `lib` is not an Elixir variable or a universal Nix import.
+Map-pattern arguments allow additional keys, corresponding to `{ lib, ... }:`.
+
+The complete [module-merging generator](examples/03_module_merging.exs) adds
+imports, list ordering, `mkDefault`, `mkForce`, and conditional configuration.
+Run it with the project's pinned Nixpkgs:
+
+```sh
+./result/bin/nix-ex generate examples/03_module_merging.exs ./module-nix
+nix develop -c bash -c 'nix-instantiate --eval --strict --json ./module-nix/default.nix --arg nixpkgs "$NIX_EX_NIXPKGS"'
+```
+
+```json
+{"enabled":true,"message":"welcome","order":["first","last"]}
+```
+
+Add `--arg enabled false` inside that quoted command to evaluate the disabled
+branch. It returns `{"enabled":false,"message":"disabled","order":["last"]}`.
+This runs synthetic modules through `lib.evalModules`; it does not activate a host.
+
+## Write an overlay
+
+Multi-argument lambdas become curried Nix functions. Interpolation stays in Nix:
+
+<!-- example: overlay -->
+```elixir
+import NixEx.DSL
+
+nix do
+  fn final, prev ->
+    %{answer: prev.answer + 1, description: "answer=#{final.answer}"}
+  end
+end
+```
+
+The [complete overlay example](examples/04_overlay.exs) uses
+`base |> Map.merge(import_nix(ref("overlay.nix")).(final, base))` to evaluate
+its recursive fixed point.
+
+```sh
+./result/bin/nix-ex generate examples/04_overlay.exs ./overlay-nix
+nix-instantiate --eval --strict --json ./overlay-nix/default.nix
+```
+
+```json
+{"answer":42,"description":"answer=42"}
+```
+
+## Syntax at a glance
+
+All forms below belong inside `nix do ... end`.
+
+| Elixir form | Generated Nix meaning |
+| --- | --- |
+| `lib.types.bool` | Select an attribute; bare function attributes remain values |
+| `lib.mkOption(type: lib.types.bool, default: false)` | Apply a function to an attribute set |
+| `f.(x, y)` | Curried application, `f x y` |
+| `x \|> f.(y)` | Insert `x` as the first argument |
+| `fn %{enabled: enabled \\ true} -> enabled end` | Attribute-set function with a lazy default |
+| `Map.merge(left, right)` | Shallow, right-biased `left // right` |
+| `ref("modules/service.nix")` | Path to a declared project output |
+| `source_path("../assets/message.txt")` | Path relative to the generated file |
+| `import_nix(ref("value.nix"), x: 41)` | Import and apply an expression |
+| `splice(host_value)` | Insert a value computed by ordinary Elixir |
+
+Nix semantics still apply: `1 / 2` is integer division, boolean operators require
+booleans, and interpolation uses `builtins.toString` (`true` becomes `"1"`;
+`false` and `nil` become `""`). Literal shell `${VARIABLE}` text is preserved.
+`[]` is an empty list; `%{}` is an empty attribute set.
+
+`import_nix(...)` and a module's `imports: [...]` are distinct operations. Elixir
+Streams can defer finite generation-time work; Nix evaluates the emitted syntax
+lazily after generation. Arbitrary Elixir calls inside the DSL are rejected;
+use `splice(...)` for explicit host computation.
+
+## Run the built-in demo and tests
 
 ```sh
 ./test
-./build
-./result/bin/nix-ex demo /tmp/nix-ex-demo
-nix eval --json path:/tmp/nix-ex-demo#answer
+./result/bin/nix-ex demo ./demo-nix
+nix eval --offline --json path:./demo-nix#answer
 # 42
-./result/bin/nix-ex check-demo /tmp/nix-ex-demo
-
-# Evaluate the generated modules with this project's pinned Nixpkgs:
-nix develop -c bash -c 'nix-instantiate --eval --strict --json /tmp/nix-ex-demo/default.nix --arg nixpkgs "$NIX_EX_NIXPKGS"'
-# {"enable":true,"greeting":"hello world","items":["first","last"],"priority":"forced"}
+./result/bin/nix-ex check-demo ./demo-nix
+# Generated tree matches.
 ```
 
-Use a fresh destination whose parent exists. An identical existing tree is a
-successful no-op; changed trees are refused. `check-demo` returns nonzero on
-drift. Generate to another directory to review a changed result. On macOS use
-canonical paths such as `/private/tmp`, because symlink ancestors are refused.
+The [six runnable examples](examples/README.md) cover recursion, assets, module
+merging, overlays, finite Streams, and an intentional runtime error. The suite
+executes the README's Elixir snippets, evaluates all six examples, compares the
+built-in demo with handwritten Nix, and checks CLI output drift. A source check
+also keeps constructor boilerplate out of ordinary examples and the demo.
 
-The toolchain pins Nixpkgs `f13ff45afd1bb73e640eaa08a7066dbed07e3238`,
-Elixir 1.18.4 and OTP 27.3.4.16, with four BEAM schedulers. The flake declares
-`x86_64-linux`, `aarch64-linux`, and `aarch64-darwin`; only x86_64 Linux has been
-run here. `./test` runs all suites in the pinned shell. `./build` builds the
-package and runs checks inside Nix's sandbox.
+`./build` runs checks in Nix's sandbox and packages the CLI. The toolchain pins
+Nixpkgs `f13ff45afd1bb73e640eaa08a7066dbed07e3238`, Elixir 1.18.4 and OTP
+27.3.4.16, with four BEAM schedulers. The flake declares `x86_64-linux`,
+`aarch64-linux`, and `aarch64-darwin`; execution has been verified on x86_64 Linux.
+The [CI manifest](.mechatron-prime/targets) selects the Linux package and checks.
+See [CI setup and verification](docs/CI.md) for webhook provisioning and
+exact-commit status commands.
 
-See the [prototype guide and coverage matrix](docs/PROTOTYPE.md) for the DSL,
-generation safety, supported semantics, and diagnostic limitations.
+## Current limits
 
-The authoring goal is familiar Elixir with less ceremony. Inside `nix do`,
-write `lib.mkOption(type: lib.types.bool, default: false)` directly. The macro
-turns dotted access and calls into Nix syntax; `fn %{lib: lib} -> ... end`
-constructs a Nix module function. These forms are demonstrated in example 03.
-Optional arguments use `enabled: enabled \\ true`. Anonymous calls, curried
-lambdas, pipes, string interpolation, `Map.merge`, and path/import helpers keep
-the built-in demo and ordinary examples free of AST-constructor boilerplate.
-Tests check that authoring convention alongside their evaluated results.
+This is a prototype. The [coverage matrix](docs/PROTOTYPE.md#coverage) distinguishes
+implemented syntax, evaluator-tested behavior, and gaps. Map-pattern renaming,
+nested destructuring, guards, and multiple function clauses are unsupported.
 
-There are now [six runnable example generators](examples/README.md), covering
-macros and recursion, imports/assets, module merging, overlays, finite Streams,
-and an intentional Nix error. Each has checked expected results.
+Elixir syntax errors retain their original file and line. Nix runtime errors
+report generated coordinates, with nearby source comments as manual hints.
+[Automatic error remapping is not implemented](docs/ERROR_LOCATIONS.md).
 
-Elixir DSL syntax errors retain their original file and line. Nix runtime
-errors currently report generated Nix coordinates, with nearby source comments
-as manual hints. There is no automatic remapping; see
-[verified error locations](docs/ERROR_LOCATIONS.md).
+The eventual target is a configuration as complex as Thelio's, including its
+flake, modules, overlays, derivations, and assets. Full translation and parity
+comparison remain unfinished. See the [acceptance plan](docs/ACCEPTANCE.md) and
+[configuration inventory](docs/THELIO_REQUIREMENTS.md).
 
-## Requirements
-
-- Represent all Nix expression forms through explicit AST constructors, with
-  ergonomic macros for common cases and explicit unsupported-syntax errors.
-- Generate a relocatable tree of files, not just a single string.
-- Distinguish Nix `import` from the NixOS module system's `imports` option.
-- Preserve relative paths, assets, interpolation, recursion, binding and scope.
-- Let generated files work with Nix alone, with no Elixir evaluation dependency.
-- Use the real Nix evaluator as a test oracle, including dead-branch laziness,
-  imports across directories, module priorities and deterministic regeneration.
-- Preserve source-location information for useful diagnostics.
-- Never activate, switch, rebuild for deployment, or overwrite a live host
-  configuration as part of this experiment.
-
-See [PLAN.md](PLAN.md) for milestones and honest completion status.
-The independent [Thelio inventory](docs/THELIO_REQUIREMENTS.md),
-[acceptance criteria](docs/ACCEPTANCE.md), and [prior art](docs/PRIOR_ART.md)
-define the remaining investigation.
-
-## Working boundary
-
-`/etc/nixos` on Thelio is read-only reference material for this project. Its
-configuration, private data, secrets, and host-specific identifiers must not be
-copied into public fixtures. Tests should use synthetic equivalents, with a
-separately opted-in local comparison against the real configuration later.
-
-No GitHub repository has been created or publication authorized yet.
+The live `/etc/nixos` configuration remains read-only reference material.
+Committed fixtures use synthetic values; publication does not authorize host
+activation, service changes, or deployment.

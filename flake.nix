@@ -15,7 +15,7 @@
             version = "0.1.0";
             src = pkgs.lib.fileset.toSource {
               root = ./.;
-              fileset = pkgs.lib.fileset.unions [ ./mix.exs ./lib ./tests ./test ./examples ];
+              fileset = pkgs.lib.fileset.unions [ ./mix.exs ./lib ./tests ./test ./examples ./README.md ];
             };
             strictDeps = true;
             nativeBuildInputs = [ elixir erlang pkgs.makeWrapper ];

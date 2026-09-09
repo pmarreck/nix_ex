@@ -2,6 +2,25 @@
 
 Started 2026-09-08 06:46 EDT. Peter requested a delegated best-shot prototype.
 
+## Documentation refresh and first publication
+
+- [x] Check current docs and examples for stale claims; preserve dated evidence.
+- [x] Add clear README examples and execute their snippets in the test suite.
+- [x] Configure and build exact CI targets; create `pmarreck/nix_ex` on GitHub.
+- [ ] Commit, push to GitHub, and verify the remote commit.
+- [ ] Provision the repository webhook and verify the exact commit's CI result.
+
+Local verification 2026-09-09: 46 tests and CLI checks passed; sandbox package
+build and both manifest targets passed. The new README test failed before its
+three runnable snippets existed. Existing examples and diagnostic documentation
+still match current behavior; the earlier defaults limitation is marked historical.
+Webhook dry-run reports CREATE for this repository. Provisioning requires the
+root-owned secret; this session's noninteractive sudo attempt was refused.
+Peter has been given the scoped command in [docs/CI.md](docs/CI.md).
+
+Peter requested publication on 2026-09-09. Check README snippets against real
+Nix evaluation, and keep the existing host activation boundary intact.
+
 ## Further authoring simplification
 
 Peter approved extending the simpler DSL on 2026-09-08.
@@ -59,8 +78,9 @@ simpler where possible; AST-constructor verbosity is a usability gap.
 Completed 2026-09-08 16:04 EDT. Six new behavior tests failed on unsupported
 syntax before implementation. The complete suite now passes 35 tests plus CLI
 checks for all six examples; the sandbox package build also passed. Example 03
-uses direct dotted calls and module map patterns. Optional arguments still need
-`N.pattern/2`; map-pattern renaming and nested destructuring remain unsupported.
+uses direct dotted calls and module map patterns. At this milestone optional
+arguments still needed `N.pattern/2`; the later simplification above added
+default syntax. Map-pattern renaming and nested destructuring remain unsupported.
 
 Curiosity checks: `lib` must remain lexically bound, custom namespaces should
 work too, and keyword shorthand must have a clear meaning beside Nix lists.

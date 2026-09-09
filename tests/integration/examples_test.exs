@@ -4,6 +4,33 @@ defmodule NixEx.ExamplesTest do
 
   @examples Path.expand("../../examples", __DIR__)
 
+  test "README Elixir examples compile and evaluate to their documented results" do
+    readme = File.read!(Path.expand("../../README.md", __DIR__))
+    snippets = Regex.scan(~r/<!-- example: (\w+) -->\n```elixir\n(.*?)\n```/s, readme)
+    assert Enum.map(snippets, &Enum.at(&1, 1)) == ["quickstart", "options", "overlay"]
+
+    values =
+      Map.new(snippets, fn [_, name, source] ->
+        {value, _} = Code.eval_string(source, [], file: "README-#{name}.exs")
+        {name, value}
+      end)
+
+    destination = Path.join(tmp!(), "readme")
+    assert :ok = NixEx.Project.write(values["quickstart"], destination)
+
+    assert {~s({"answer":42,"greeting":"hello Elixir"}), 0} ==
+             eval_file(Path.join(destination, "default.nix"))
+
+    alias NixEx.AST, as: N
+    lib = N.import_(N.absolute_path(System.fetch_env!("NIX_EX_NIXPKGS") <> "/lib"))
+    option = N.call(values["options"], [N.attrs(lib: lib)])
+    assert eval!(N.select(option, ["options", "example", "enabled", "default"])) == "false"
+    assert eval!(N.select(option, ["options", "example", "message", "default"])) == ~s("welcome")
+
+    assert eval!(N.call(values["overlay"], [N.attrs(answer: 42), N.attrs(answer: 41)])) ==
+             ~s({"answer":42,"description":"answer=42"})
+  end
+
   test "the demo and ordinary examples teach the quoted DSL without constructor boilerplate" do
     paths = [
       Path.expand("../../lib/nix_ex/demo.ex", __DIR__) | Path.wildcard(@examples <> "/*.exs")
