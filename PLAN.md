@@ -8,8 +8,8 @@ Started 2026-09-08 06:46 EDT. Peter requested a delegated best-shot prototype.
 - [x] Add clear README examples and execute their snippets in the test suite.
 - [x] Configure and build exact CI targets; create `pmarreck/nix_ex` on GitHub.
 - [x] Commit, push to GitHub, and verify the remote commit.
-- [ ] Provision the repository webhook and verify the exact commit's CI result.
-  - Webhook created 2026-09-09 19:05 EDT: GitHub hook id 676882816, active, `push` only, secret set, endpoint `https://thelio-nixos.tail66c90.ts.net/hooks/github`. Dry-run had reported CREATE. A signed `yolo` push after this is required; provisioning does not build an earlier commit.
+- [x] Provision the repository webhook and verify the exact commit's CI result. Completed 2026-09-09 19:07 EDT.
+  - Webhook 676882816 created, then `yolo` push `f5c75b1662d618f89bbe8082b7e256dd78884eb4` admitted and passed in 30s. `mechatron-ci log --project nix_ex --commit f5c75b1` reports `success`. Public badge `https://thelio-nixos.tail66c90.ts.net/badges/nix_ex.json` is `PASSING`.
 
 Local verification 2026-09-09: 46 tests and CLI checks passed; sandbox package
 build and both manifest targets passed. The new README test failed before its
