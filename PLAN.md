@@ -20,8 +20,11 @@ belong outside this repository. No activation or source-host edits.
   synthetic fixtures. Completed 2026-09-09 23:16 EDT: 59 tests, CLI checks,
   sandbox package build and both CI manifest targets passed. Initialize the
   sandbox Nix store before parallel tests to avoid concurrent schema creation.
-- [ ] Push the reusable tooling and verify exact-commit CI; keep the complete
-  translated configuration and comparison records private.
+- [x] Push the reusable tooling and verify exact-commit CI; keep the complete
+  translated configuration and comparison records private. Completed 2026-09-09
+  23:18 EDT: `1fd6219cc12c565528a0394a451c1cc67af30f40` passed CI in 15 seconds;
+  fetched `origin/yolo` matched. All 133 live source file hashes still match the
+  captured baseline, and the packaged CLI reproduced the independent tree.
 
 Verified 2026-09-09 23:10 EDT: 49 expressions and 84 assets regenerate with
 the original source directory unavailable. Full system derivations evaluate;
