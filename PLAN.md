@@ -16,7 +16,10 @@ its authoring forms and the public conversion/checking workflow.
   Nix flake apps; native plugin APIs require a matching Nix build.
 - [x] Update runnable documentation, verify packaged commands, and run tests/build.
   Verified 2026-09-10 12:05 EDT: 75 tests, CLI smoke and sandbox build passed.
-- [ ] Push and verify exact-commit CI.
+- [x] Push and verify exact-commit CI. Completed 2026-09-10 12:08 EDT:
+  `fb56b441f8f2f1ddb3595ee04c5add5167b78066` passed in 7 seconds; fetched
+  `origin/yolo` matched. All declared platforms' package/check/app outputs
+  evaluated successfully; execution and sandbox builds ran on x86_64 Linux.
 
 All 49 private expressions now emit zero `AST.node` escapes. Source size fell
 from 345,808 to 247,423 bytes. Inheritance, recursive bindings, strict and whole-set
