@@ -11,6 +11,24 @@ defmodule NixEx.DSLTest do
     expression
   end
 
+  test "explicit Nix scope helpers preserve with lookup and assertions" do
+    assert eval!(
+             quoted!(~S"""
+             with_nix %{answer: 42} do
+               assert_nix answer == 42 do
+                 answer
+               end
+             end
+             """)
+           ) == "42"
+
+    assert_raise RuntimeError, ~r/assertion/, fn ->
+      eval!(quoted!("assert_nix false do 42 end"))
+    end
+
+    assert eval!(quoted!(~S|let ["custom-name": 42] do var("custom-name") end|)) == "42"
+  end
+
   test "optional map arguments use lazy Nix defaults and preserve false and null overrides" do
     alias NixEx.AST, as: N
 

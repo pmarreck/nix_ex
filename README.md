@@ -148,6 +148,9 @@ All forms below belong inside `nix do ... end`.
 | `source_path("../assets/message.txt")` | Path relative to the generated file |
 | `import_nix(ref("value.nix"), x: 41)` | Import and apply an expression |
 | `splice(host_value)` | Insert a value computed by ordinary Elixir |
+| `with_nix pkgs do [git, curl] end` | Evaluate the body with Nix's `with pkgs;` scope |
+| `assert_nix enabled do value end` | Keep a Nix assertion lazy until its result is demanded |
+| `var("custom-name")` | Refer to a Nix identifier that Elixir cannot spell directly |
 
 Nix semantics still apply: `1 / 2` is integer division, boolean operators require
 booleans, and interpolation uses `builtins.toString` (`true` becomes `"1"`;
@@ -194,10 +197,15 @@ Elixir syntax errors retain their original file and line. Nix runtime errors
 report generated coordinates, with nearby source comments as manual hints.
 [Automatic error remapping is not implemented](docs/ERROR_LOCATIONS.md).
 
-The goal is to support complete NixOS configurations spanning flakes, modules,
-overlays, derivations, and supporting assets. Full configuration translation
-and parity comparison remain unfinished. See the
-[acceptance plan](docs/ACCEPTANCE.md) for the verification criteria.
+The [migration guide](docs/MIGRATION.md) provides tested commands for converting
+existing Nix into editable Elixir. A complete private configuration with 49
+expressions and 84 supporting files now regenerates from Elixir alone and
+evaluates to a system derivation. Recursive comparison explains every derivation
+difference through one relocated policy-file path; the guide records the limits
+of that evidence. Advanced migrated forms still use explicit AST nodes and need
+further authoring simplification. No host activation has been performed.
+
+See the [acceptance plan](docs/ACCEPTANCE.md) for the verification criteria.
 
 Examples and tests use synthetic configurations. Generating or evaluating them
 does not activate a system, change services, or deploy a configuration.

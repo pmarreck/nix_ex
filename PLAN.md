@@ -2,6 +2,37 @@
 
 Started 2026-09-08 06:46 EDT. Peter requested a delegated best-shot prototype.
 
+## Complete private configuration translation
+
+Peter requested full Elixir reproduction on 2026-09-09. Public changes must
+remain generic; host-specific sources, generated outputs and comparison data
+belong outside this repository. No activation or source-host edits.
+
+- [x] Capture a private, immutable working-tree baseline, including staged
+  changes, with per-file hashes and source revision provenance.
+- [x] Establish evaluator-backed failing tests for a one-time migration path
+  that emits editable Elixir and rejects unsupported syntax explicitly.
+- [x] Translate the complete local expression tree and supporting assets;
+  generated Elixir must regenerate without reading original Nix expressions.
+- [x] Compare pinned evaluated host options and derivation identities, with
+  explicit path-sensitive differences and forced-change controls.
+- [x] Document remaining gaps honestly and validate reusable tooling and
+  synthetic fixtures. Completed 2026-09-09 23:16 EDT: 59 tests, CLI checks,
+  sandbox package build and both CI manifest targets passed. Initialize the
+  sandbox Nix store before parallel tests to avoid concurrent schema creation.
+- [ ] Push the reusable tooling and verify exact-commit CI; keep the complete
+  translated configuration and comparison records private.
+
+Verified 2026-09-09 23:10 EDT: 49 expressions and 84 assets regenerate with
+the original source directory unavailable. Full system derivations evaluate;
+five changed derivations trace to one source-relative policy path, with identical
+policy bytes/mode and no unexplained differences. Compared 515 system packages,
+all user package lists, 174 systemd units, 186 `/etc` entries, 11 filesystems,
+boot/firewall settings and five service enable flags. An Elixir hostname mutation
+changed the evaluated hostname. A drifted upstream version file was recovered
+with its exact locked NAR hash; both evaluations used the same local URL override.
+Detailed provenance and results remain private. See [migration guide](docs/MIGRATION.md).
+
 ## Public README wording
 
 - [x] Replace personal host references with generic configuration goals and
@@ -166,12 +197,12 @@ intentional failure is forced by Nix, and module inputs retain the existing pin.
 - [ ] Add generated-span source maps and translate Nix runtime error locations
   to unambiguous original Elixir paths/lines (future work, not implemented here).
 
-- [ ] Express the complete Thelio configuration tree through the DSL without
+- [x] Express the complete Thelio configuration tree through the DSL without
   using raw Nix strings or importing the original configuration as the answer.
-- [ ] Compare relevant evaluated options and derivation identities against an
+- [x] Compare relevant evaluated options and derivation identities against an
   exact pinned source baseline, accounting explicitly for source-path changes.
 - [x] Make an ordinary generated flake consumable with Nix alone and verify
   reproducible regeneration and a clean generated-output diff gate.
-  Synthetic prototype proven; future full host translation still required.
+  Synthetic prototype and complete private host translation verified; see above.
 - [ ] Only after separate Peter approval, plan a real host migration. Until
   then, no activation, service changes or writes to `/etc/nixos` are authorized.

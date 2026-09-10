@@ -17,6 +17,15 @@ defmodule NixEx.DSL do
   defp translate({name, meta, [path]}, env) when name in [:ref, :source_path],
     do: call(name, [translate(path, env)], meta, env)
 
+  defp translate({:var, meta, [name]}, env) when is_binary(name),
+    do: call(:var, [name], meta, env)
+
+  defp translate({name, meta, [scope, [do: body]]}, env)
+       when name in [:with_nix, :assert_nix] do
+    constructor = if name == :with_nix, do: :with_, else: :assert_
+    call(constructor, [translate(scope, env), translate(body, env)], meta, env)
+  end
+
   defp translate({:import_nix, meta, args}, env) when length(args) in [1, 2],
     do: call(:import_, Enum.map(args, &call_argument(&1, meta, env)), meta, env)
 
@@ -100,7 +109,7 @@ defmodule NixEx.DSL do
 
   defp translate({:let, meta, [bindings, [do: body]]} = syntax, env) when is_list(bindings) do
     unless Keyword.keyword?(bindings), do: unsupported!(syntax, env)
-    pairs = Enum.map(bindings, fn {k, v} -> {k, translate(v, env)} end)
+    pairs = Enum.map(bindings, fn {k, v} -> {Atom.to_string(k), translate(v, env)} end)
     call(:let, [pairs, translate(body, env)], meta, env)
   end
 

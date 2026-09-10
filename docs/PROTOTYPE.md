@@ -114,6 +114,12 @@ See example 03 for complete module declarations.
 Nix's shallow, right-biased `//` update, including lazy recursive overlays.
 Other `Map` calls and the three-argument Elixir merge are unsupported.
 
+`with_nix scope do ... end` and `assert_nix condition do ... end` emit Nix's
+`with` and `assert` expressions. Their bodies retain lazy Nix semantics.
+`var("custom-name")` refers to identifiers that need an explicit string in
+Elixir. Quoted keyword keys work in `let`, including `let "custom-name": 42 do
+var("custom-name") end`.
+
 Inside `nix`, operators have Nix semantics: `1 / 2` is integer division and
 `&&`/`||` require booleans. Arbitrary Elixir code is not transpiled.
 AST constructors cover the richer Nix syntax listed below.
@@ -164,10 +170,10 @@ not just compared with a generated-source snapshot.
 | Relative paths, imports, assets, directory defaults | `ref/1`, `source_path/1`, `import_/1,2` | Evaluated after relocation; path interpolation tested |
 | Modules, typed options, priorities, ordered list merge | ordinary function/attribute AST | Pinned `lib.evalModules`, handwritten comparison, changed-input and invalid-type controls |
 | Flake syntax and outputs | ordinary function/attribute AST | Generated no-input flake evaluated with Nix alone |
-| Derivations, fetchers, `callPackage`, `overrideAttrs` | ordinary function/attribute AST | Expressible; no full package/host translation demonstrated |
+| Derivations, fetchers, `callPackage`, `overrideAttrs` | ordinary function/attribute AST | Complete private configuration translated and evaluated; [comparison evidence](MIGRATION.md#evidence-from-a-complete-private-configuration) |
 | Absolute paths | `absolute_path/1` | Implemented, intentionally not relocatable |
 | Search-path lookup `<name>`, deprecated URI literal spelling | none | Unsupported; use explicit pinned paths and strings |
-| Comments, formatting preservation, source-position identity | origin annotations only | No round-trip parser or exact source preservation |
+| Comments, formatting preservation, source-position identity | origin annotations only | One-time migration parser exists; original formatting and positions are not preserved |
 | Raw escape hatch | `raw_nix/1` | Unvalidated, never counted as expression coverage |
 
 ## Output safety and diagnostics
@@ -198,6 +204,6 @@ ambiguous. The built-in demo uses macro origins from its actual declarations.
 Generated source positions and paths can be observable
 in Nix, so expression coverage does not prove universal identity.
 
-Full Thelio parity requires a file-by-file translation, pinned option and
-derivation comparisons, and individual explanations for path-sensitive
-differences. See [the independent acceptance plan](ACCEPTANCE.md).
+The [migration guide](MIGRATION.md) records the complete private translation,
+its pinned derivation comparisons and the remaining authoring and runtime gaps.
+See [the independent acceptance plan](ACCEPTANCE.md) for the verification criteria.
