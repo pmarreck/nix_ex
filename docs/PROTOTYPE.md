@@ -62,7 +62,7 @@ subset using Elixir macros; `splice(...)` explicitly runs ordinary Elixir while
 constructing that data. Unknown DSL forms, including Elixir module calls such
 as `System.cmd(...)`,
 raise `CompileError` with the original file and line. The macro supports
-literals, lists, static-key maps, variables, binary operators, unary `!`/`-`,
+literals, lists, static and dynamic map keys, variables, binary operators, unary `!`/`-`,
 `if` with both branches, lambdas, `let [name: value] do ... end`,
 `apply(fun, [args])`, `get(value, ["attribute"])`, and `throw(message)`.
 
@@ -110,6 +110,12 @@ Defaults remain Nix expressions, can refer to other arguments, and are forced
 only when needed. Explicit `false` or `nil` overrides the default.
 See example 03 for complete module declarations.
 
+`fn args = %{x: x} -> ... end` also binds the original argument set. Defaults
+do not get inserted into `args`. Use `fn exact(%{x: x}) -> ... end` to reject
+additional keys; combine them as `fn args = exact(%{x: x}) -> ... end`.
+For a Nix name that Elixir cannot spell, use
+`fn %{"custom-name": var("custom-name")} -> var("custom-name") end`.
+
 `Map.merge(left, right)` is the supported Elixir-module-call exception. It emits
 Nix's shallow, right-biased `//` update, including lazy recursive overlays.
 Other `Map` calls and the three-argument Elixir merge are unsupported.
@@ -119,6 +125,29 @@ Other `Map` calls and the three-argument Elixir merge are unsupported.
 `var("custom-name")` refers to identifiers that need an explicit string in
 Elixir. Quoted keyword keys work in `let`, including `let "custom-name": 42 do
 var("custom-name") end`.
+
+Binding blocks allow ordinary assignments and inheritance:
+
+```elixir
+nix do
+  let do
+    inherit(builtins, [:add])
+    x = 40
+    rec do
+      inherit(x)
+      answer = add.(x, 2)
+    end
+  end
+end
+```
+
+`attrs do ... end` emits a non-recursive set; `rec do ... end` emits a recursive
+set. `rec(%{x: 1, y: x + 1})` is a compact map form. An unscoped `inherit(x)`
+retains outer lexical lookup even inside a recursive set. Assignments in `attrs`
+define fields, not sequential Elixir variables; sibling lookup requires `rec`.
+Assignments in `let` remain recursive Nix bindings. Map expressions may
+also appear in binding blocks. `get(value, ["key"], fallback)` and
+`has?(value, ["key"])` accept dynamic path components as expressions.
 
 Inside `nix`, operators have Nix semantics: `1 / 2` is integer division and
 `&&`/`||` require booleans. Arbitrary Elixir code is not transpiled.
@@ -148,6 +177,13 @@ generation-time work. `N.string(["prefix ", expr])` remains the explicit AST for
 The renderer uses escaped quoted Nix
 strings, including for multiline text. It does not reproduce indented-string
 source spelling or dedentation rules.
+
+Use `~n"prefix #{value}"` or a `~n` heredoc when interpolation should use Nix's
+direct string coercion. This preserves path copying and string context, and
+rejects booleans or numbers that Nix cannot directly interpolate. Use an explicit
+`builtins.toString(value)` inside the interpolation when conversion is intended.
+The migration emitter uses these forms and keeps multiline scripts readable.
+Ordinary DSL interpolation retains its existing `builtins.toString` behavior.
 
 ## Coverage
 

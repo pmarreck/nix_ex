@@ -393,18 +393,25 @@ defmodule NixEx.Migrate do
       else: "var(#{inspect(name)})"
   end
 
-  defp dsl(%Expr{op: :attrs, args: {bindings, false}} = expr) do
-    if Enum.all?(bindings, &match?({[name], _} when is_binary(name), &1)) do
-      "%{" <>
-        Enum.map_join(bindings, ",\n", fn {[key], value} ->
-          inspect(key) <> " => " <> dsl(value)
-        end) <> "}"
+  defp dsl(%Expr{op: :attrs, args: {bindings, recursive}}) do
+    if Enum.all?(bindings, &match?({[_], _}, &1)) do
+      keywords = Enum.all?(bindings, &match?({[name], _} when is_binary(name), &1))
+
+      map =
+        "%{" <>
+          Enum.map_join(bindings, ",\n", fn {[key], value} ->
+            if(keywords, do: inspect(key) <> ": ", else: attribute_source(key) <> " => ") <>
+              dsl(value)
+          end) <> "}"
+
+      if recursive, do: "rec(#{map})", else: map
     else
-      escape(expr)
+      name = if recursive, do: "rec", else: "attrs"
+      "#{name} do\n#{binding_source(bindings)}\nend"
     end
   end
 
-  defp dsl(%Expr{op: :let, args: {bindings, body}} = expr) do
+  defp dsl(%Expr{op: :let, args: {bindings, body}}) do
     if Enum.all?(bindings, fn
          {[name], _} -> is_binary(name)
          _ -> false
@@ -414,30 +421,26 @@ defmodule NixEx.Migrate do
           inspect(name) <> ": " <> dsl(value)
         end) <> "] do\n" <> dsl(body) <> "\nend"
     else
-      escape(expr)
+      "let do\n#{binding_source(bindings)}\n#{dsl(body)}\nend"
     end
   end
 
-  defp dsl(%Expr{op: :fn, args: {name, body}} = expr) when is_binary(name) do
-    if safe_name?(name), do: "fn #{name} -> #{dsl(body)} end", else: escape(expr)
+  defp dsl(%Expr{op: :fn, args: {name, body}}) when is_binary(name) do
+    "fn #{dsl(AST.var(name))} -> #{dsl(body)} end"
   end
 
   defp dsl(%Expr{op: :fn, args: {%Expr{op: :pattern, args: {params, opts}}, body}} = expr) do
-    names =
-      Enum.map(params, fn
-        {name, _} -> name
-        name -> name
-      end)
-
-    if Keyword.get(opts, :ellipsis, false) and Keyword.get(opts, :at) == nil and
-         Enum.all?(names, &safe_name?/1) do
+    if Keyword.get(opts, :at) == nil or safe_name?(Keyword.get(opts, :at)) do
       fields =
         Enum.map_join(params, ", ", fn
-          {name, default} -> "#{name}: #{name} \\\\ (#{dsl(default)})"
-          name -> "#{name}: #{name}"
+          {name, default} -> "#{inspect(name)}: #{dsl(AST.var(name))} \\\\ (#{dsl(default)})"
+          name -> "#{inspect(name)}: #{dsl(AST.var(name))}"
         end)
 
-      "fn %{#{fields}} ->\n#{dsl(body)}\nend"
+      pattern = "%{#{fields}}"
+      pattern = if Keyword.get(opts, :ellipsis, false), do: pattern, else: "exact(#{pattern})"
+      pattern = if opts[:at], do: "#{opts[:at]} = #{pattern}", else: pattern
+      "fn #{pattern} ->\n#{dsl(body)}\nend"
     else
       escape(expr)
     end
@@ -445,7 +448,20 @@ defmodule NixEx.Migrate do
 
   defp dsl(%Expr{op: :call} = expr) do
     {fun, args} = application(expr, [])
-    arguments = Enum.map_join(args, ", ", &dsl/1)
+
+    arguments =
+      case args do
+        [%Expr{op: :attrs, args: {[_ | _] = bindings, false}}] ->
+          if Enum.all?(bindings, &match?({[name], _} when is_binary(name), &1)),
+            do:
+              Enum.map_join(bindings, ", ", fn {[name], value} ->
+                "#{inspect(name)}: #{dsl(value)}"
+              end),
+            else: Enum.map_join(args, ", ", &dsl/1)
+
+        _ ->
+          Enum.map_join(args, ", ", &dsl/1)
+      end
 
     case fun do
       %Expr{op: :var, args: "import"} when length(args) in [1, 2] ->
@@ -467,10 +483,48 @@ defmodule NixEx.Migrate do
   defp dsl(%Expr{op: :assert, args: {condition, body}}),
     do: "assert_nix #{dsl(condition)} do\n#{dsl(body)}\nend"
 
-  defp dsl(%Expr{op: :select, args: {value, path, :no_default}} = expr) do
+  defp dsl(%Expr{op: :select, args: {value, path, :no_default}}) do
     if Enum.all?(path, &safe_name?/1),
       do: "(" <> dsl(value) <> ")." <> Enum.join(path, "."),
-      else: escape(expr)
+      else: "get(#{dsl(value)}, #{path_source(path)})"
+  end
+
+  defp dsl(%Expr{op: :select, args: {value, path, {:default, default}}}),
+    do: "get(#{dsl(value)}, #{path_source(path)}, #{dsl(default)})"
+
+  defp dsl(%Expr{op: :has, args: {value, path}}),
+    do: "has?(#{dsl(value)}, #{path_source(path)})"
+
+  defp dsl(%Expr{op: :string, args: parts}) do
+    multiline =
+      Enum.any?(parts, &(is_binary(&1) and String.contains?(&1, "\n"))) and
+        is_binary(List.last(parts)) and String.ends_with?(List.last(parts), "\n")
+
+    content =
+      Enum.map_join(parts, fn
+        text when is_binary(text) ->
+          escape = fn piece ->
+            piece |> inspect(printable_limit: :infinity) |> String.slice(1..-2//1)
+          end
+
+          if multiline do
+            text
+            |> String.split("\n")
+            |> Enum.map_join("\n", fn piece ->
+              piece
+              |> escape.()
+              |> String.replace("\\\"", "\"")
+              |> String.replace("\"\"\"", "\\\"\"\"")
+            end)
+          else
+            escape.(text)
+          end
+
+        expr ->
+          "\#{" <> dsl(expr) <> "}"
+      end)
+
+    if multiline, do: "~n\"\"\"\n" <> content <> "\"\"\"", else: "~n\"" <> content <> "\""
   end
 
   defp dsl(%Expr{op: :if, args: {condition, yes, no}}),
@@ -478,6 +532,7 @@ defmodule NixEx.Migrate do
 
   defp dsl(%Expr{op: :op, args: {op, left, right}} = expr) do
     cond do
+      op == "+" and string_left?(left) -> dsl(AST.string(string_parts(expr)))
       op == "//" -> "Map.merge(#{dsl(left)}, #{dsl(right)})"
       op == "->" -> escape(expr)
       true -> "(#{dsl(left)} #{op} #{dsl(right)})"
@@ -494,6 +549,40 @@ defmodule NixEx.Migrate do
   defp dsl(value), do: inspect(value, limit: :infinity, printable_limit: :infinity)
   defp application(%Expr{op: :call, args: {fun, args}}, rest), do: application(fun, args ++ rest)
   defp application(fun, args), do: {fun, args}
+
+  defp string_left?(value) when is_binary(value), do: true
+  defp string_left?(%Expr{op: :op, args: {"+", left, _}}), do: string_left?(left)
+  defp string_left?(_), do: false
+  defp string_parts(%Expr{op: :op, args: {"+", left, right}}), do: string_parts(left) ++ [right]
+  defp string_parts(value), do: [value]
+
+  defp attribute_source(%Expr{op: :dynamic, args: value}), do: dsl(value)
+  defp attribute_source(value), do: inspect(value)
+  defp path_source(path), do: "[" <> Enum.map_join(path, ", ", &attribute_source/1) <> "]"
+
+  defp binding_source(bindings) do
+    Enum.map_join(bindings, "\n", fn
+      %Expr{op: :inherit, args: {nil, names}} ->
+        "inherit(" <>
+          Enum.map_join(names, ", ", fn name ->
+            if safe_name?(name), do: name, else: inspect(name)
+          end) <> ")"
+
+      %Expr{op: :inherit, args: {scope, names}} ->
+        "inherit(#{dsl(scope)}, #{inspect(names)})"
+
+      {[name], value} when is_binary(name) ->
+        "#{dsl(AST.var(name))} = #{dsl(value)}"
+
+      {[%Expr{op: :dynamic} = key], value} ->
+        "%{#{attribute_source(key)} => #{dsl(value)}}"
+
+      {path, value} ->
+        if Enum.all?(path, &safe_name?/1),
+          do: "#{Enum.join(path, ".")} = #{dsl(value)}",
+          else: raise(ArgumentError, "unsupported binding path for Elixir migration")
+    end)
+  end
 
   defp safe_name?(name) when is_binary(name),
     do:

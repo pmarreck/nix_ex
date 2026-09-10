@@ -4,6 +4,11 @@
 The resulting `.exs` files regenerate ordinary Nix through `NixEx.Project`.
 Regeneration needs neither the original expressions nor the migration parser.
 
+For a single file, the short commands are `nix-ex import module.nix`,
+`nix-ex convert module.nix.exs`, and `nix-ex check generated`. Nix app equivalents
+and recurring project settings are documented in [the command guide](COMMANDS.md).
+The library example below is useful when assembling a larger migration script.
+
 Start from a private snapshot of your complete configuration. Preserve its lock
 file, supporting assets, executable bits, symlink targets and source revision.
 Include uncommitted files that the configuration actually uses. Keep that
@@ -76,10 +81,12 @@ unsupported; use explicit pinned inputs.
 Ordinary functions, calls, maps, bindings and conditionals use the quoted DSL.
 `with_nix scope do ... end`, `assert_nix condition do ... end`, and
 `var("a-name-with-dashes")` preserve Nix constructs that need explicit names.
-Strict argument patterns, whole-argument bindings, inheritance, recursive sets,
-dynamic keys and interpolated strings may use `splice(NixEx.AST.node(...))`.
-These are structured expressions, but their emitted Elixir still needs ergonomic
-cleanup. Migration preserves behavior before attempting authoring simplification.
+Strict argument patterns use `exact(%{...})`; whole-argument bindings use `=`.
+`attrs` and `rec` blocks support `inherit(...)` and ordinary assignments.
+Dynamic attributes use map keys, and `get/3` supplies lazy selection defaults.
+`~n` strings preserve Nix interpolation and context; multiline scripts use
+heredocs. Hyphenated argument names use `var("custom-name")` in the pattern.
+Uncommon forms outside this sugar can still use structured AST expressions.
 
 ## Evidence from a complete private configuration
 
@@ -116,3 +123,7 @@ the real Nix evaluator. Before adopting any migrated configuration, compare its
 evaluated settings and derivations against its own pinned baseline, then change
 an Elixir setting and verify that the comparison detects it. See the
 [acceptance criteria](ACCEPTANCE.md) for the separate host-cutover boundary.
+
+On 2026-09-10, all 49 expressions were retranslated with zero explicit AST
+constructor escapes. Evaluator tests cover the added syntax, interpolation
+context, strict-pattern failures, and the executable README examples.

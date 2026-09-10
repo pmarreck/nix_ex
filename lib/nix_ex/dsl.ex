@@ -14,6 +14,28 @@ defmodule NixEx.DSL do
   defp translate({:<<>>, meta, parts}, env),
     do: call(:string, [Enum.map(parts, &string_part(&1, env))], meta, env)
 
+  defp translate({:sigil_n, meta, [{:<<>>, _, parts}, []]}, env),
+    do: call(:string, [Enum.map(parts, &nix_string_part(&1, env))], meta, env)
+
+  defp translate({name, meta, [[do: body]]}, env) when name in [:attrs, :rec] do
+    call(:attrs, [binding_block(body, env), [recursive: name == :rec]], meta, env)
+  end
+
+  defp translate({:rec, meta, [{:%{}, _, _} = map]}, env),
+    do: call(:attrs, [binding_block(map, env), [recursive: true]], meta, env)
+
+  defp translate({:let, meta, [[do: body]]}, env) do
+    statements = statements(body)
+    bindings = Enum.drop(statements, -1)
+
+    call(
+      :let,
+      [binding_block({:__block__, [], bindings}, env), translate(List.last(statements), env)],
+      meta,
+      env
+    )
+  end
+
   defp translate({name, meta, [path]}, env) when name in [:ref, :source_path],
     do: call(name, [translate(path, env)], meta, env)
 
@@ -32,7 +54,7 @@ defmodule NixEx.DSL do
   defp translate({:%{}, meta, pairs} = syntax, env) do
     pairs =
       Enum.map(pairs, fn
-        {k, v} when is_atom(k) or is_binary(k) -> {k, translate(v, env)}
+        {k, v} -> {[attribute(k, env)], translate(v, env)}
         _ -> unsupported!(syntax, env)
       end)
 
@@ -117,7 +139,19 @@ defmodule NixEx.DSL do
     do: call(:call, [translate(fun, env), translate(args, env)], meta, env)
 
   defp translate({:get, meta, [value, path]}, env) when is_list(path),
-    do: call(:select, [translate(value, env), Macro.escape(path)], meta, env)
+    do: call(:select, [translate(value, env), Enum.map(path, &attribute(&1, env))], meta, env)
+
+  defp translate({:get, meta, [value, path, default]}, env) when is_list(path),
+    do:
+      call(
+        :select,
+        [translate(value, env), Enum.map(path, &attribute(&1, env)), translate(default, env)],
+        meta,
+        env
+      )
+
+  defp translate({:has?, meta, [value, path]}, env) when is_list(path),
+    do: call(:has, [translate(value, env), Enum.map(path, &attribute(&1, env))], meta, env)
 
   defp translate({:throw, meta, [message]}, env),
     do:
@@ -158,14 +192,102 @@ defmodule NixEx.DSL do
 
   defp string_part(syntax, env), do: unsupported!(syntax, env)
 
+  defp nix_string_part(text, _) when is_binary(text), do: Macro.unescape_string(text)
+
+  defp nix_string_part(
+         {:"::", _, [{{:., _, [Kernel, :to_string]}, _, [value]}, {:binary, _, _}]},
+         env
+       ),
+       do: translate(value, env)
+
+  defp nix_string_part(syntax, env), do: unsupported!(syntax, env)
+
+  defp attribute(name, _) when is_atom(name), do: Atom.to_string(name)
+  defp attribute(name, _) when is_binary(name), do: name
+  defp attribute(expression, env), do: call(:dynamic, [translate(expression, env)], [], env)
+
+  defp statements({:__block__, _, expressions}), do: expressions
+  defp statements(expression), do: [expression]
+
+  defp binding_block(body, env) do
+    groups =
+      Enum.map(statements(body), fn
+        {:inherit, meta, [scope, names]} when is_list(names) ->
+          names = Enum.map(names, &inherit_name(&1, env))
+          [call(:inherit_, [translate(scope, env), names], meta, env)]
+
+        {:inherit, meta, names} ->
+          [call(:inherit_, [Enum.map(names, &inherit_name(&1, env))], meta, env)]
+
+        {:%{}, _, pairs} ->
+          Enum.map(pairs, fn {key, value} -> {[attribute(key, env)], translate(value, env)} end)
+
+        {:=, _, [key, value]} ->
+          [{binding_path(key, env), translate(value, env)}]
+
+        syntax ->
+          unsupported!(syntax, env)
+      end)
+
+    Enum.concat(groups)
+  end
+
+  defp inherit_name(name, _) when is_atom(name), do: Atom.to_string(name)
+  defp inherit_name(name, _) when is_binary(name), do: name
+
+  defp inherit_name({name, _, context}, _) when is_atom(name) and is_atom(context),
+    do: Atom.to_string(name)
+
+  defp inherit_name(syntax, env), do: unsupported!(syntax, env)
+
+  defp binding_path({name, _, context}, _) when is_atom(name) and is_atom(context),
+    do: [Atom.to_string(name)]
+
+  defp binding_path({:var, _, [name]}, _) when is_binary(name), do: [name]
+
+  defp binding_path({{:., _, [parent, name]}, _, []}, env),
+    do: binding_path(parent, env) ++ [Atom.to_string(name)]
+
+  defp binding_path(syntax, env), do: unsupported!(syntax, env)
+
   # Keep argument names explicit so repeated Elixir patterns cannot silently
   # become shadowing Nix parameters when a multi-argument function is curried.
   defp parameter({name, _, context}, _env) when is_atom(name) and is_atom(context),
     do: {Atom.to_string(name), [name]}
 
-  defp parameter({:%{}, _, pairs} = syntax, env) do
+  defp parameter({:var, _, [name]}, _) when is_binary(name), do: {name, [String.to_atom(name)]}
+
+  defp parameter({:=, _, [{name, _, context}, argument]} = syntax, env)
+       when is_atom(name) and is_atom(context) do
+    unless match?({:%{}, _, _}, argument) or match?({:exact, _, [_]}, argument),
+      do: unsupported!(syntax, env)
+
+    {pattern, names} = parameter(argument, env)
+
+    value =
+      quote do
+        %NixEx.Expr{args: {params, opts}} = unquote(pattern)
+        NixEx.AST.pattern(params, Keyword.put(opts, :at, unquote(Atom.to_string(name))))
+      end
+
+    {value, [name | names]}
+  end
+
+  defp parameter({:exact, _, [{:%{}, _, _} = map]}, env), do: map_parameter(map, env, false)
+  defp parameter({:%{}, _, _} = map, env), do: map_parameter(map, env, true)
+  defp parameter(syntax, env), do: unsupported!(syntax, env)
+
+  defp map_parameter({:%{}, _, pairs} = syntax, env, ellipsis) do
     params =
       Enum.map(pairs, fn
+        {name, {:var, _, [bound]}} when is_atom(name) and is_binary(bound) ->
+          unless Atom.to_string(name) == bound, do: unsupported!(syntax, env)
+          bound
+
+        {name, {:\\, _, [{:var, _, [bound]}, default]}} when is_atom(name) and is_binary(bound) ->
+          unless Atom.to_string(name) == bound, do: unsupported!(syntax, env)
+          {bound, translate(default, env)}
+
         {name, {name, _, context}} when is_atom(name) and is_atom(context) ->
           Atom.to_string(name)
 
@@ -177,11 +299,9 @@ defmodule NixEx.DSL do
           unsupported!(syntax, env)
       end)
 
-    pattern = quote do: NixEx.AST.pattern(unquote(params), ellipsis: true)
+    pattern = quote do: NixEx.AST.pattern(unquote(params), ellipsis: unquote(ellipsis))
     {pattern, Enum.map(pairs, &elem(&1, 0))}
   end
-
-  defp parameter(syntax, env), do: unsupported!(syntax, env)
 
   # Elixir represents both trailing keywords and bracketed keywords as a list.
   # Only nonempty keyword lists in call argument positions become sets.

@@ -2,6 +2,30 @@
 
 Started 2026-09-08 06:46 EDT. Peter requested a delegated best-shot prototype.
 
+## Readable migration output and short commands
+
+Requested 2026-09-10. Preserve the verified private configuration while improving
+its authoring forms and the public conversion/checking workflow.
+
+- [x] Inventory remaining explicit AST forms and establish readable syntax with
+  failing evaluator tests. Preserve strict patterns, inheritance and string context.
+- [x] Emit the simpler DSL from migration and compare a fresh private translation
+  against the verified system derivation.
+- [x] Provide short conversion and checking commands with tested defaults,
+  useful failures and paths containing spaces. Supply portable CLI commands and
+  Nix flake apps; native plugin APIs require a matching Nix build.
+- [x] Update runnable documentation, verify packaged commands, and run tests/build.
+  Verified 2026-09-10 12:05 EDT: 75 tests, CLI smoke and sandbox build passed.
+- [ ] Push and verify exact-commit CI.
+
+All 49 private expressions now emit zero `AST.node` escapes. Source size fell
+from 345,808 to 247,423 bytes. Inheritance, recursive bindings, strict and whole-set
+patterns, dynamic keys and multiline Nix strings use DSL forms. The updated full
+system evaluates; all five changed derivations are explained by the same relocated
+policy path and dependent outputs, with no unexplained differences. The packaged
+`convert` and `check` apps successfully ran against the private authoring project.
+The short registry alias was tested in a private registry, not installed globally.
+
 ## Complete private configuration translation
 
 Peter requested full Elixir reproduction on 2026-09-09. Public changes must

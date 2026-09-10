@@ -11,6 +11,69 @@ defmodule NixEx.DSLTest do
     expression
   end
 
+  test "binding blocks preserve inheritance, recursive attributes and outer scope" do
+    assert eval!(quoted!("let x: 7 do attrs do x = 1; y = x end end")) == ~s({"x":1,"y":7})
+    assert eval!(quoted!("let x: 7 do rec do x = 1; y = x end end")) == ~s({"x":1,"y":1})
+    assert eval!(quoted!("let do y = x + 1; x = 41; y end")) == "42"
+
+    assert eval!(
+             quoted!(~S"""
+             let x: 7 do
+               let do
+                 inherit(x)
+                 next = x + 1
+                 rec do
+                   inherit(x, next)
+                   %{answer: next + 1}
+                 end
+               end
+             end
+             """)
+           ) == ~s({"answer":9,"next":8,"x":7})
+
+    assert eval!(
+             quoted!(~S"""
+             attrs do
+               inherit(%{answer: 42}, [:answer])
+               %{other: 3}
+             end
+             """)
+           ) == ~s({"answer":42,"other":3})
+  end
+
+  test "whole-argument bindings preserve lazy defaults and exact patterns reject extra keys" do
+    assert eval!(
+             quoted!(~S"""
+             (fn args = exact(%{x: x \\ 3}) -> %{x: x, supplied: has?(args, ["x"])} end).(%{})
+             """)
+           ) == ~s({"supplied":false,"x":3})
+
+    assert_raise RuntimeError, ~r/unexpected argument/, fn ->
+      eval!(quoted!("(fn exact(%{x: x}) -> x end).(%{x: 1, extra: 2})"))
+    end
+  end
+
+  test "dynamic keys and selection defaults remain lazy" do
+    assert eval!(
+             quoted!(~S"""
+             let key: "answer" do
+               get(%{key => 42}, [key], throw("unused"))
+             end
+             """)
+           ) == "42"
+
+    assert eval!(quoted!(~S|get(%{}, ["missing"], 42)|)) == "42"
+  end
+
+  test "Nix string sigils retain interpolation coercion and literal escaping" do
+    assert eval!(quoted!(~S|let x: "world" do ~n"hello #{x}\n\#{literal}" end|)) ==
+             ~s("hello world\\n\#{literal}")
+
+    assert_raise RuntimeError, ~r/coerce.*Boolean|coerce.*boolean/, fn ->
+      eval!(quoted!(~S|~n"#{true}"|))
+    end
+  end
+
   test "explicit Nix scope helpers preserve with lookup and assertions" do
     assert eval!(
              quoted!(~S"""
@@ -392,7 +455,7 @@ defmodule NixEx.DSLTest do
   end
 
   test "unsupported partial forms report CompileError consistently" do
-    for source <- ["%{key => 1}", "if true, do: 1", "let [1], do: 2"] do
+    for source <- ["if true, do: 1", "let [1], do: 2"] do
       assert_raise CompileError, ~r/unsupported nix syntax/, fn ->
         Code.eval_string("import NixEx.DSL\nnix do\n" <> source <> "\nend", [],
           file: "unsupported.exs"

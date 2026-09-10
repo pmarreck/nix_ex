@@ -7,7 +7,7 @@ defmodule NixEx.ExamplesTest do
   test "README Elixir examples compile and evaluate to their documented results" do
     readme = File.read!(Path.expand("../../README.md", __DIR__))
     snippets = Regex.scan(~r/<!-- example: (\w+) -->\n```elixir\n(.*?)\n```/s, readme)
-    assert Enum.map(snippets, &Enum.at(&1, 1)) == ["quickstart", "options", "overlay"]
+    assert Enum.map(snippets, &Enum.at(&1, 1)) == ["quickstart", "options", "overlay", "advanced"]
 
     values =
       Map.new(snippets, fn [_, name, source] ->
@@ -29,6 +29,13 @@ defmodule NixEx.ExamplesTest do
 
     assert eval!(N.call(values["overlay"], [N.attrs(answer: 42), N.attrs(answer: 41)])) ==
              ~s({"answer":42,"description":"answer=42"})
+
+    result = N.call(values["advanced"], [N.attrs([])])
+    assert eval!(N.select(result, ["name"])) == ~s("Elixir")
+    assert eval!(N.select(result, ["supplied"])) == "false"
+
+    assert eval!(N.select(result, ["message"])) ==
+             ~s("Hello, Elixir!\\nShell ${HOME} stays literal.\\n")
   end
 
   test "the demo and ordinary examples teach the quoted DSL without constructor boilerplate" do

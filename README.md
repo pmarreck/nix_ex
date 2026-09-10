@@ -12,6 +12,36 @@ Outside the block, you have ordinary Elixir for organizing and generating files.
 
 [Project intent](INTENT.md) · [DSL guide](docs/PROTOTYPE.md) · [Examples](examples/README.md) · [Current work](PLAN.md)
 
+## Short commands
+
+Register the flake once, then use its command apps from your configuration directory:
+
+```sh
+nix registry add ex github:pmarreck/nix_ex
+nix run ex#convert
+nix run ex#check
+```
+
+`convert` reads `generate.exs` and writes `generated/`. `check` evaluates the
+result without building or activating a system. Put long output attributes and
+input overrides in `nix-ex.exs`, so these everyday commands stay short.
+
+For individual files or comparisons:
+
+```sh
+nix run ex#import -- module.nix
+nix run ex#convert -- module.nix.exs
+nix run ex#check -- generated --against original.nix
+```
+
+An installed package offers the same commands as `nix-ex import`, `nix-ex convert`
+and `nix-ex check`. In this checkout, use `nix run .#convert` or the built
+`./result/bin/nix-ex`. See [command settings and checking limits](docs/COMMANDS.md).
+
+These are ordinary Nix flake apps. Native `nix ex` subcommands would require a
+compiled plugin matched to Nix's unstable plugin API; flake apps avoid that
+dependency. [Nix plugin documentation](https://nix.dev/manual/nix/2.34/command-ref/conf-file.html#conf-plugin-files)
+
 ## Quick start
 
 Install Nix with flakes and `nix-command` enabled. The project supplies its pinned
@@ -134,6 +164,30 @@ nix-instantiate --eval --strict --json ./overlay-nix/default.nix
 
 ## Syntax at a glance
 
+Advanced forms also stay in the DSL. A whole-argument binding uses Elixir's `=`;
+`exact(...)` explicitly rejects extra keys, and `inherit` retains Nix scope:
+
+<!-- example: advanced -->
+```elixir
+import NixEx.DSL
+
+nix do
+  fn options = exact(%{name: name \\ "Elixir"}) ->
+    attrs do
+      inherit(name)
+      supplied = has?(options, ["name"])
+      message = ~n"""
+      Hello, #{name}!
+      Shell ${HOME} stays literal.
+      """
+    end
+  end
+end
+```
+
+`~n` uses Nix interpolation directly, including path copying and string context.
+Ordinary `"#{value}"` retains the DSL's explicit `builtins.toString` conversion.
+
 All forms below belong inside `nix do ... end`.
 
 | Elixir form | Generated Nix meaning |
@@ -151,6 +205,13 @@ All forms below belong inside `nix do ... end`.
 | `with_nix pkgs do [git, curl] end` | Evaluate the body with Nix's `with pkgs;` scope |
 | `assert_nix enabled do value end` | Keep a Nix assertion lazy until its result is demanded |
 | `var("custom-name")` | Refer to a Nix identifier that Elixir cannot spell directly |
+| `attrs do inherit(x); y = x + 1 end` | Attribute bindings with lexical inheritance |
+| `rec(%{x: 1, y: x + 1})` | Recursive attributes |
+| `let do inherit(scope, [:x]); x + 1 end` | Let bindings with scoped inheritance |
+| `fn args = exact(%{x: x}) -> x end` | Strict argument set with a whole-argument binding |
+| `%{key => value}` | Dynamic attribute name |
+| `get(value, ["key"], fallback)` | Attribute selection with a lazy fallback |
+| `has?(value, ["key"])` | Attribute existence |
 
 Nix semantics still apply: `1 / 2` is integer division, boolean operators require
 booleans, and interpolation uses `builtins.toString` (`true` becomes `"1"`;
@@ -202,8 +263,10 @@ existing Nix into editable Elixir. A complete private configuration with 49
 expressions and 84 supporting files now regenerates from Elixir alone and
 evaluates to a system derivation. Recursive comparison explains every derivation
 difference through one relocated policy-file path; the guide records the limits
-of that evidence. Advanced migrated forms still use explicit AST nodes and need
-further authoring simplification. No host activation has been performed.
+of that evidence. All 49 expressions now migrate without explicit AST nodes,
+including inherited bindings, strict patterns and multiline scripts. No host
+activation has been performed. Migration is a starting point for editing;
+comments and original formatting are not preserved.
 
 See the [acceptance plan](docs/ACCEPTANCE.md) for the verification criteria.
 

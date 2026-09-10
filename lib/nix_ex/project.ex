@@ -102,6 +102,29 @@ defmodule NixEx.Project do
 
   def check(entries, destination), do: identical?(plan(entries), destination!(destination))
 
+  def write_file(path, bytes) when is_binary(bytes) do
+    path = destination!(path)
+    no_symlinks!(Path.dirname(path))
+
+    case File.write(path, bytes, [:exclusive]) do
+      :ok ->
+        :ok
+
+      {:error, :eexist} ->
+        unless match?({:ok, %{type: :regular}}, File.lstat(path)) and File.read!(path) == bytes,
+          do:
+            raise(
+              ArgumentError,
+              "destination exists and differs or is not a regular file: #{path}"
+            )
+
+        :ok
+
+      {:error, reason} ->
+        raise File.Error, reason: reason, action: "write", path: path
+    end
+  end
+
   defp publish(planned, destination, lock) do
     staging = Path.join(lock, "tree")
     File.mkdir!(staging)

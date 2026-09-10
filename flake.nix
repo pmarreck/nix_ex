@@ -43,7 +43,7 @@
               mkdir -p $out/bin
               cp nix_ex $out/bin/nix-ex
               patchShebangs $out/bin/nix-ex
-              wrapProgram $out/bin/nix-ex --prefix PATH : ${pkgs.lib.makeBinPath [ elixir erlang ]} --set ERL_FLAGS "+S 4:4 +fnu"
+              wrapProgram $out/bin/nix-ex --prefix PATH : ${pkgs.lib.makeBinPath [ elixir erlang pkgs.nix pkgs.bash ]} --set ERL_FLAGS "+S 4:4 +fnu"
             '';
           };
         in { inherit pkgs elixir erlang package; };
@@ -58,10 +58,24 @@
           NIX_EX_NIXPKGS = toString nixpkgs;
         };
       });
-      apps = each (system: { default = {
-        type = "app";
-        program = "${self.packages.${system}.default}/bin/nix-ex";
-        meta.description = "Generate a standalone synthetic Nix project";
-      }; });
+      apps = each (system: let
+        env = make system;
+        commandApp = command: {
+          type = "app";
+          program = toString (env.pkgs.writeShellScript "nix-ex-${command}" ''
+            exec ${env.package}/bin/nix-ex ${command} "$@"
+          '');
+          meta.description = "${command} an Elixir-authored Nix configuration";
+        };
+      in {
+        default = {
+          type = "app";
+          program = "${env.package}/bin/nix-ex";
+          meta.description = "Convert and check Elixir-authored Nix configurations";
+        };
+        convert = commandApp "convert";
+        check = commandApp "check";
+        import = commandApp "import";
+      });
     };
 }

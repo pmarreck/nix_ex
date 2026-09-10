@@ -48,5 +48,29 @@ for example in 01_macro_and_recursion 02_imports_and_assets 03_module_merging 04
     failures=$((failures + 1))
   fi
 done
+# The everyday workflow runs without paths or attributes in the command line.
+printf '%s\n' 'import NixEx.DSL' 'nix do: %{answer: 42}' > "$examples_cli_tmp/generate.exs"
+for command in convert check; do
+  output=$(cd "$examples_cli_tmp" && escript "$repository/nix_ex" "$command" 2>&1)
+  code=$?
+  if [ "$code" -ne 0 ]; then
+    printf 'CLI %s defaults failed: %s\n' "$command" "$output" >&2
+    failures=$((failures + 1))
+  fi
+done
+printf '%s\n' 'throw "deliberate check failure"' > "$examples_cli_tmp/generated/default.nix"
+output=$(cd "$examples_cli_tmp" && escript "$repository/nix_ex" check 2>&1)
+code=$?
+if [ "$code" -eq 0 ] || [[ "$output" != *"deliberate check failure"* ]]; then
+  printf 'CLI check did not force a failure: %s\n' "$output" >&2
+  failures=$((failures + 1))
+fi
+printf '%s\n' '{ answer = 42; }' > "$examples_cli_tmp/import with spaces.nix"
+output=$(escript "$repository/nix_ex" import "$examples_cli_tmp/import with spaces.nix" 2>&1)
+code=$?
+if [ "$code" -ne 0 ] || [ ! -f "$examples_cli_tmp/import with spaces.nix.exs" ]; then
+  printf 'CLI import failed: %s\n' "$output" >&2
+  failures=$((failures + 1))
+fi
 if [ "$failures" -ne 0 ]; then exit "$failures"; fi
-printf 'CLI smoke, demo drift check and six examples from another cwd passed\n'
+printf 'CLI smoke, drift checks, six examples and short commands passed\n'

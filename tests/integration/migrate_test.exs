@@ -55,15 +55,72 @@ defmodule NixEx.MigrateTest do
     code = roundtrip("let custom-name=42; in custom-name")
     refute code =~ "AST.node"
     assert code =~ "var("
+    code = roundtrip("let x=42; in {inherit x;}")
+    assert code =~ "inherit(x)"
+    code = roundtrip("let lib.mkOption=x: x; in lib.mkOption {default=42;}")
+    assert code =~ "lib.mkOption(default: 42)"
   end
 
   test "migration preserves patterns, inheritance, dynamic attributes and fallbacks" do
-    roundtrip(~S"""
-    let f = { x ? 3, ... }@args: x + args.y;
-        attr = "dynamic";
-    in { result = f {y=4;}; set = { ${attr} = 9; inherit (builtins) nixVersion; };
-         missing = {}.absent or 42; has = {a.b=1;} ? a.b; }
-    """)
+    code =
+      roundtrip(~S"""
+      let f = { x ? 3, ... }@args: x + args.y;
+          attr = "dynamic";
+      in { result = f {y=4;}; set = { ${attr} = 9; inherit (builtins) nixVersion; };
+           missing = {}.absent or 42; has = {a.b=1;} ? a.b; }
+      """)
+
+    refute code =~ "AST.node"
+  end
+
+  test "advanced expressions migrate to authoring forms without constructor escapes" do
+    for source <- [
+          "let x=2; in rec { inherit x; answer=x+40; }",
+          "let inherit (builtins) add; in add 20 22",
+          "({ custom-name ? 42 }@args: custom-name) {}",
+          ~S|let who="world"; in "hello ${who}"|,
+          "({ x ? 42 }@args: x) {}"
+        ] do
+      code = roundtrip(source)
+      refute code =~ "AST.node"
+      refute code =~ "splice("
+    end
+  end
+
+  test "multiline scripts remain readable and preserve Nix interpolation context" do
+    code =
+      roundtrip(~S"""
+      let who="world"; in ''
+        echo "hello ${who}"
+        shell ''${HOME}
+        literal #{not_elixir}
+        printf '\n'
+        literal \""" marker
+      ''
+      """)
+
+    assert code =~ ~s(~n""")
+    assert code =~ ~s(echo "hello)
+    assert code =~ "shell ${HOME}"
+
+    root = tmp!()
+    asset = Path.join(root, "asset")
+    File.write!(asset, "payload")
+    original = Path.join(root, "original.nix")
+    File.write!(original, ~s(let s = "prefix" + #{asset}; in builtins.getContext s))
+    expression = NixEx.Migrate.from_file(original, root: Path.dirname(root))
+    {regenerated, _} = Code.eval_string(NixEx.Migrate.to_elixir(expression))
+    outputs = MapSet.new([Path.basename(root) <> "/asset"])
+
+    generated =
+      NixEx.Render.render(regenerated,
+        file: Path.basename(root) <> "/generated.nix",
+        outputs: outputs
+      )
+
+    generated_path = Path.join(root, "generated.nix")
+    File.write!(generated_path, generated)
+    assert eval_file(generated_path) == eval_file(original)
   end
 
   test "migration retains derivation identity without executing its builder" do
