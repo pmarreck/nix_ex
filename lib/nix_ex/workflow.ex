@@ -5,17 +5,25 @@ defmodule NixEx.Workflow do
   def run(command, args) do
     {options, positional, invalid} =
       OptionParser.parse(args,
-        strict: [project: :string, attr: :string, against: :string, offline: :boolean]
+        strict: [
+          project: :string,
+          attr: :string,
+          against: :string,
+          offline: :boolean,
+          nixpkgs: :boolean,
+          json: :boolean,
+          arg: :keep
+        ]
       )
 
     if invalid != [], do: raise(ArgumentError, "unknown options: #{inspect(invalid)}")
 
     allowed =
       if command == "check",
-        do: [:project, :attr, :against, :offline],
+        do: [:project, :attr, :against, :offline, :nixpkgs, :json, :arg],
         else: if(command == "convert", do: [:project], else: [])
 
-    irrelevant = Keyword.keys(options) -- allowed
+    irrelevant = Enum.uniq(Keyword.keys(options)) -- allowed
 
     if irrelevant != [],
       do: raise(ArgumentError, "options not valid for #{command}: #{inspect(irrelevant)}")
@@ -82,7 +90,12 @@ defmodule NixEx.Workflow do
 
     attribute = Keyword.get(options, :attr, Keyword.get(config, :attribute))
     against = Keyword.get(options, :against)
-    first = evaluate(target, attribute, options, config, against != nil)
+    json = Keyword.get(options, :json, false)
+
+    if json and against,
+      do: raise(ArgumentError, "--json and --against are separate output modes")
+
+    first = evaluate(target, attribute, options, config, json or against != nil)
 
     if against do
       second = evaluate(against, attribute, options, config, true)
@@ -92,7 +105,7 @@ defmodule NixEx.Workflow do
 
       {:ok, "Evaluated values match."}
     else
-      {:ok, "Nix evaluation passed: #{Path.expand(target)}"}
+      {:ok, if(json, do: first, else: "Nix evaluation passed: #{Path.expand(target)}")}
     end
   end
 
@@ -120,6 +133,9 @@ defmodule NixEx.Workflow do
     flake = File.dir?(target) and File.regular?(Path.join(target, "flake.nix"))
 
     if flake do
+      if Keyword.get(options, :nixpkgs, false) or Keyword.has_key?(options, :arg),
+        do: raise(ArgumentError, "--nixpkgs and --arg apply to expression files, not flakes")
+
       common = [
         "--extra-experimental-features",
         "nix-command flakes",
@@ -146,7 +162,10 @@ defmodule NixEx.Workflow do
       else
         if json,
           do:
-            raise(ArgumentError, "comparing flakes requires --attr or an attribute in nix-ex.exs")
+            raise(
+              ArgumentError,
+              "JSON evaluation or comparison of flakes requires --attr or an attribute in nix-ex.exs"
+            )
 
         cmd!("nix", common ++ ["flake", "check", "--no-build"] ++ flags ++ ["path:#{target}"])
       end
@@ -154,6 +173,7 @@ defmodule NixEx.Workflow do
       file = if File.dir?(target), do: Path.join(target, "default.nix"), else: target
       flags = if attribute, do: ["--attr", attribute], else: []
       flags = flags ++ if(json, do: ["--json"], else: [])
+      flags = flags ++ arguments(options)
 
       cmd!(
         "nix-instantiate",
@@ -161,6 +181,31 @@ defmodule NixEx.Workflow do
           flags ++ [file]
       )
     end
+  end
+
+  defp arguments(options) do
+    Enum.flat_map(options, fn
+      {:nixpkgs, true} ->
+        path = System.fetch_env!("NIX_EX_NIXPKGS")
+        literal = path |> NixEx.AST.absolute_path() |> NixEx.Render.render() |> String.trim()
+        ["--arg", "nixpkgs", literal]
+
+      {:arg, argument} ->
+        case String.split(argument, "=", parts: 2) do
+          [name, expression] when name != "" and expression != "" ->
+            ["--arg", name, expression]
+
+          _ ->
+            raise ArgumentError, "--arg expects NAME=EXPRESSION"
+        end
+
+      _ ->
+        []
+    end)
+    |> Enum.chunk_every(3)
+    |> Enum.reverse()
+    |> Enum.uniq_by(&Enum.at(&1, 1))
+    |> List.flatten()
   end
 
   defp cmd!(command, args) do

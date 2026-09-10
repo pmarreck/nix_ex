@@ -9,6 +9,52 @@ defmodule NixEx.WorkflowTest do
     end
   end
 
+  test "check applies pinned module arguments and prints evaluated JSON" do
+    root = tmp!()
+    script = Path.expand("../../examples/03_module_merging.exs", __DIR__)
+    assert {:ok, _} = NixEx.CLI.run(["convert", script, root <> "/module"])
+    command = ["check", root <> "/module", "--nixpkgs", "--json"]
+    assert {:ok, result} = NixEx.CLI.run(command)
+
+    assert :json.decode(result) == %{
+             "enabled" => true,
+             "message" => "welcome",
+             "order" => ["first", "last"]
+           }
+
+    assert {:ok, result} = NixEx.CLI.run(command ++ ["--arg", "enabled=false"])
+
+    assert :json.decode(result) == %{
+             "enabled" => false,
+             "message" => "disabled",
+             "order" => ["last"]
+           }
+
+    assert {:error, _} = NixEx.CLI.run(command ++ ["--arg", "enabled=throw \"forced\""])
+  end
+
+  test "check argument flags reject ambiguous or inapplicable usage" do
+    root = tmp!()
+    File.write!(root <> "/default.nix", "{ x, y }: [x y]")
+
+    assert {:ok, "[1,2]"} =
+             NixEx.CLI.run(["check", root, "--json", "--arg", "x=1", "--arg", "y=2"])
+
+    assert {:error, _} = NixEx.CLI.run(["check", root, "--arg", "x"])
+    assert {:error, _} = NixEx.CLI.run(["check", root, "--json", "--against", root])
+    File.write!(root <> "/flake.nix", "{outputs = _: {answer = 42;};}")
+    assert {:error, _} = NixEx.CLI.run(["check", root, "--json"])
+    assert {:error, _} = NixEx.CLI.run(["check", root, "--attr", "answer", "--nixpkgs"])
+  end
+
+  test "later explicit and pinned arguments take precedence" do
+    root = tmp!()
+    File.write!(root <> "/default.nix", "{ nixpkgs }: builtins.isPath nixpkgs")
+    command = ["check", root, "--json"]
+    assert {:ok, "true"} = NixEx.CLI.run(command ++ ["--arg", "nixpkgs=42", "--nixpkgs"])
+    assert {:ok, "false"} = NixEx.CLI.run(command ++ ["--nixpkgs", "--arg", "nixpkgs=42"])
+  end
+
   test "convert accepts an expression or generator and check forces evaluation" do
     root = tmp!()
     script = Path.join(root, "my config.exs")

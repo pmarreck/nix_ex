@@ -122,15 +122,16 @@ imports, list ordering, `mkDefault`, `mkForce`, and conditional configuration.
 Run it with the project's pinned Nixpkgs:
 
 ```sh
-./result/bin/nix-ex generate examples/03_module_merging.exs ./module-nix
-nix develop -c bash -c 'nix-instantiate --eval --strict --json ./module-nix/default.nix --arg nixpkgs "$NIX_EX_NIXPKGS"'
+nix run .#convert -- examples/03_module_merging.exs ./module-nix
+nix run .#check -- ./module-nix --nixpkgs --json
 ```
 
 ```json
 {"enabled":true,"message":"welcome","order":["first","last"]}
 ```
 
-Add `--arg enabled false` inside that quoted command to evaluate the disabled
+`--nixpkgs` supplies this package's pinned Nixpkgs; `--json` prints the value.
+Add `--arg enabled=false` to the check command to evaluate the disabled
 branch. It returns `{"enabled":false,"message":"disabled","order":["last"]}`.
 This runs synthetic modules through `lib.evalModules`; it does not activate a host.
 

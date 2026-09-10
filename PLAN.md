@@ -4,6 +4,14 @@ Started 2026-09-08 06:46 EDT. Peter requested a delegated best-shot prototype.
 
 ## Quick start command cleanup
 
+- [x] Simplify the module example with `check --nixpkgs --json` and repeatable
+  `--arg NAME=EXPRESSION`. Tests cover both module branches, forced failures,
+  actual path types, later-argument precedence and rejected flag combinations.
+  Verified 2026-09-10 14:49 EDT: 78 tests and CLI checks passed; sandbox build
+  passed and packaged commands returned both documented JSON results.
+- [x] Quick start commit `cc45840` passed CI at 14:46 EDT after retrying a
+  webhook delivery that initially failed with HTTP 502.
+
 - [x] Use `convert` and `check` in the README Quick start. Verified 2026-09-10
   14:40 EDT: packaged apps converted and checked the extracted snippet with
   explicit paths and no registry alias; all 75 tests, CLI checks and build passed.

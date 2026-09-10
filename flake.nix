@@ -43,7 +43,7 @@
               mkdir -p $out/bin
               cp nix_ex $out/bin/nix-ex
               patchShebangs $out/bin/nix-ex
-              wrapProgram $out/bin/nix-ex --prefix PATH : ${pkgs.lib.makeBinPath [ elixir erlang pkgs.nix pkgs.bash ]} --set ERL_FLAGS "+S 4:4 +fnu"
+              wrapProgram $out/bin/nix-ex --prefix PATH : ${pkgs.lib.makeBinPath [ elixir erlang pkgs.nix pkgs.bash ]} --set ERL_FLAGS "+S 4:4 +fnu" --set NIX_EX_NIXPKGS ${nixpkgs}
             '';
           };
         in { inherit pkgs elixir erlang package; };

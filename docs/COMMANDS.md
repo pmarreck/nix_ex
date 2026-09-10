@@ -75,7 +75,18 @@ Elixir generators and settings are trusted programs with ordinary host access.
 nix-ex check generated
 nix-ex check generated --attr answer
 nix-ex check generated --against original.nix
+nix-ex check module-nix --nixpkgs --json
+nix-ex check module-nix --nixpkgs --json --arg enabled=false
 ```
+
+For expression files, `--nixpkgs` applies the package's pinned Nixpkgs path as
+the `nixpkgs` function argument. `--arg NAME=EXPRESSION` supplies other arguments
+and can be repeated; values are Nix expressions, so quote strings as Nix strings.
+Arguments are passed directly to Nix without shell evaluation. These application
+flags do not apply to flakes. Checks without arguments leave functions unapplied.
+
+`--json` prints the evaluated value instead of a success message. Flakes require
+an attribute for JSON output. Use `--against` separately to report equality.
 
 Checks disable import-from-derivation and do not write lock files. Flake input
 fetching remains possible unless `--offline` or the project setting disables it.

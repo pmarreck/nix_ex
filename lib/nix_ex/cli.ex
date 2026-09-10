@@ -9,6 +9,9 @@ defmodule NixEx.CLI do
       --against ORIGINAL                Compare evaluated JSON values
       --project FILE                    Read settings (default: nix-ex.exs)
       --offline                         Use cached flake inputs
+      --nixpkgs                         Apply the package's pinned Nixpkgs argument
+      --arg NAME=EXPRESSION             Apply a Nix argument (repeatable)
+      --json                            Print the evaluated JSON value
     generate FILE.exs DESTINATION        Generate an explicit project
     demo DESTINATION                    Generate the synthetic demo
     check-demo DESTINATION              Check demo output for drift

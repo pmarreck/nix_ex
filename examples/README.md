@@ -28,12 +28,12 @@ generated `default.nix`. Example 02 reads its input asset with `__DIR__`, so its
 generator works from another current directory. The generated tree also works
 after relocation; the suite moves it under a directory containing spaces.
 
-Example 03 needs the pinned Nixpkgs path supplied by this repo's shell:
+Example 03 uses the package's pinned Nixpkgs through `--nixpkgs`:
 
 ```sh
-./result/bin/nix-ex generate examples/03_module_merging.exs /tmp/nix-example-03
-nix develop -c bash -c 'nix-instantiate --eval --strict --json /tmp/nix-example-03/default.nix --arg nixpkgs "$NIX_EX_NIXPKGS"'
-nix develop -c bash -c 'nix-instantiate --eval --strict --json /tmp/nix-example-03/default.nix --arg nixpkgs "$NIX_EX_NIXPKGS" --arg enabled false'
+nix run .#convert -- examples/03_module_merging.exs /tmp/nix-example-03
+nix run .#check -- /tmp/nix-example-03 --nixpkgs --json
+nix run .#check -- /tmp/nix-example-03 --nixpkgs --json --arg enabled=false
 # Disabled: {"enabled":false,"message":"disabled","order":["last"]}
 ```
 
