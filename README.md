@@ -73,13 +73,13 @@ expression =
 Generate the Nix files, then evaluate them:
 
 ```sh
-./result/bin/nix-ex generate hello.exs ./hello-nix
-nix-instantiate --eval --strict --json ./hello-nix/default.nix
+nix run .#convert -- hello.exs ./hello-nix
+nix run .#check -- ./hello-nix
 ```
 
-```json
-{"answer":42,"greeting":"hello Elixir"}
-```
+`check` forces evaluation and reports success or an error. This expression
+evaluates to `{"answer":42,"greeting":"hello Elixir"}`; the command reports
+the check result rather than printing that value.
 
 You can move `hello-nix` elsewhere and evaluate it without Elixir. Use a fresh
 destination with an existing parent. Identical output is a successful no-op;

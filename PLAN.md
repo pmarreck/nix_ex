@@ -2,6 +2,13 @@
 
 Started 2026-09-08 06:46 EDT. Peter requested a delegated best-shot prototype.
 
+## Quick start command cleanup
+
+- [x] Use `convert` and `check` in the README Quick start. Verified 2026-09-10
+  14:40 EDT: packaged apps converted and checked the extracted snippet with
+  explicit paths and no registry alias; all 75 tests, CLI checks and build passed.
+  Clarify that `check` reports success rather than printing the evaluated value.
+
 ## Readable migration output and short commands
 
 Requested 2026-09-10. Preserve the verified private configuration while improving
